@@ -5,6 +5,7 @@ void SetupGlutTime();
 void OnFrame();
 // int GetDeltaTime();
 // int GetCurrentTime();
+
 char* GetFPS();
 
 #endif // GLUT_TIME_H
