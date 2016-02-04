@@ -60,7 +60,7 @@ typedef struct Coords {
 
 typedef struct {
     Coords pos, dpos;
-	double	phi, a;
+	double	phi;
     int showFire, shotCooldown;
 } Ship;
 
@@ -83,7 +83,7 @@ static const Coords shipPoints[] = { { 0, 2}, {1.2, -1.6}, {0, -1}, {-1.2, -1.6}
 /* -- function prototypes --------------------------------------------------- */
 
 static void	myDisplay(void);
-static void	myTimer(int value);
+static void	mainTime(int value);
 static void	myKey(unsigned char key, int x, int y);
 static void	keyPress(int key, int x, int y);
 static void	keyRelease(int key, int x, int y);
@@ -113,8 +113,6 @@ static Ship	ship;
 static Photon	photons[MAX_PHOTONS];
 static Asteroid	asteroids[MAX_ASTEROIDS];
 
-char toDisplay[3];
-
 /* -- added effect on death ------------------------------------------------- */
 static Coords hitA, hitB, hitC, hitD;
 static int showHitLines;
@@ -125,32 +123,28 @@ static int showHitLines;
 int
 main(int argc, char *argv[])
 {
-    srand((unsigned int) time(NULL));
+  srand((unsigned int) time(NULL));
 
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGB);
-    glutInitWindowSize(600, 600);
-    glutCreateWindow("Asteroids");
-    glutDisplayFunc(myDisplay);
-    glutIgnoreKeyRepeat(1);
-    glutKeyboardFunc(myKey);
-    glutSpecialFunc(keyPress);
-    glutSpecialUpFunc(keyRelease);
-    glutReshapeFunc(myReshape);
-    glutTimerFunc(33, myTimer, 0);
-	SetupGlutTime();
-    glClearColor(0.0, 0.0, 0.0, 1.0);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	
-	toDisplay[0] = '1';
-	toDisplay[1] = '2';	
-	toDisplay[3] = '\0';
-	
-    init();
-    
-    glutMainLoop();
-    
-    return 0;
+  glutInit(&argc, argv);
+  glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGB);
+  glutInitWindowSize(600, 600);
+  glutCreateWindow("Asteroids");
+  glutDisplayFunc(myDisplay);
+  glutIgnoreKeyRepeat(1);
+  glutKeyboardFunc(myKey);
+  glutSpecialFunc(keyPress);
+  glutSpecialUpFunc(keyRelease);
+  glutReshapeFunc(myReshape);
+  glutTimerFunc(33, mainTime, 0);
+  SetupGlutTime();
+  glClearColor(0.0, 0.0, 0.0, 1.0);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+  init();
+
+  glutMainLoop();
+
+  return 0;
 }
 
 /* -- callback functions ---------------------------------------------------- */
@@ -165,41 +159,41 @@ myDisplay()
     int	i;
 	OnFrame();
 
-    glClear(GL_COLOR_BUFFER_BIT);
+  glClear(GL_COLOR_BUFFER_BIT);
 
-    glLoadIdentity();
+  glLoadIdentity();
 
-    drawShip(&ship);
+  drawShip(&ship);
 
-    for (i=0; i<MAX_PHOTONS; i++)
-    	if (photons[i].active)
-            drawPhoton(&photons[i]);
+  for (i=0; i<MAX_PHOTONS; i++)
+  	if (photons[i].active)
+          drawPhoton(&photons[i]);
 
-    for (i=0; i<MAX_ASTEROIDS; i++)
-    	if (asteroids[i].active)
-            drawAsteroid(&asteroids[i]);
-    
-    if(showHitLines)
-    {
-        glLoadIdentity();
-        glBegin(GL_LINES);
-        glColor3f(1.0,0.0,0.0);
-        glVertex2d(hitA.x, hitA.y);
-        glVertex2d(hitB.x, hitB.y);
-        glVertex2d(hitC.x, hitC.y);
-        glVertex2d(hitD.x, hitD.y);
-        glEnd();
-    }
-	
+  for (i=0; i<MAX_ASTEROIDS; i++)
+  	if (asteroids[i].active)
+          drawAsteroid(&asteroids[i]);
+
+  if(showHitLines)
+  {
+      glLoadIdentity();
+      glBegin(GL_LINES);
+      glColor3f(1.0,0.0,0.0);
+      glVertex2d(hitA.x, hitA.y);
+      glVertex2d(hitB.x, hitB.y);
+      glVertex2d(hitC.x, hitC.y);
+      glVertex2d(hitD.x, hitD.y);
+      glEnd();
+  }
+
 	glLoadIdentity();
 	COLOR_GL_LINE;
 	DisplayString(GetFPS(),3,3,93,4);
-    
+
     glutSwapBuffers();
 }
 
 void
-myTimer(int value)
+mainTime(int value)
 {
     int i, j, asteroidsActiveCount = 0, recallTime = 33;
     /*
@@ -207,40 +201,32 @@ myTimer(int value)
      */
 
     /* reset some state values */
-    
+
     showHitLines = 0;
-    
+
     /* advance the ship */
     {
-        double speed;
+        double speed, da;
         ship.phi += (left * SHIP_MAX_ROTATION) - (right * SHIP_MAX_ROTATION);
-        
-        if (up || down)
-        {
-            ship.a += SHIP_SPEEDUP_FRAME_INCREMENT;
-            if(ship.a > SHIP_ACCELERATION)ship.a = SHIP_ACCELERATION;
-        }
-        else
-        {
-            ship.a = 0;
-        }
-        
-        ship.dpos.x += ((up * SHIP_ACCELERATION) - (down * SHIP_ACCELERATION)) * -sin(ship.phi);
-        ship.dpos.y += ((up * SHIP_ACCELERATION) - (down * SHIP_ACCELERATION)) * cos(ship.phi);
-        
+
+		    da = (up * SHIP_ACCELERATION) - (down * SHIP_ACCELERATION);
+
+        ship.dpos.x += da * -sin(ship.phi);
+        ship.dpos.y += da * cos(ship.phi);
+
         speed = sqrt(ship.dpos.x*ship.dpos.x + ship.dpos.y*ship.dpos.y);
-        
+
         if( speed > SHIP_MAX_SPEED ) // I am just going to add this here, add "&& !down" for big rigs mode.
         {
             ship.dpos.x = (ship.dpos.x / speed) * SHIP_MAX_SPEED;
             ship.dpos.y = (ship.dpos.y / speed) * SHIP_MAX_SPEED;
         }
-        
+
         ship.pos.x += ship.dpos.x;
         ship.pos.y += ship.dpos.y;
-        
+
         screenWrap(&ship.pos, 2);
-        
+
         if(ship.shotCooldown > 0)
             ship.shotCooldown--;
     }
@@ -250,14 +236,14 @@ myTimer(int value)
         if(photons[i].active >= 2)
         {
             Coords lineFromPoint[2], zero = {0,0};
-            
+
             lineFromPoint[0] = photons[i].pos;
-            
+
             photons[i].pos.x += photons[i].dpos.x;
             photons[i].pos.y += photons[i].dpos.y;
-            
+
             lineFromPoint[1] = photons[i].pos;
-            
+
             if( screenWrap(&photons[i].pos, 2) )
                 photons[i].active = 0;
             for (j = 0; j < MAX_ASTEROIDS; j++)
@@ -270,7 +256,7 @@ myTimer(int value)
                         spawnAsteroidSpecific((rand() % 2 + 2), asteroids[j].pos.x, asteroids[j].pos.y, myRandom(2,5));
                 }
             }
-                
+
         }
         else if(photons[i].active == 1)
         {
@@ -288,26 +274,26 @@ myTimer(int value)
     }
 
     /* advance asteroids */
-    
+
     for (i = 0; i < MAX_ASTEROIDS; i++) {
         if(asteroids[i].active)
         {
             double squareMax = asteroids[i].maxCoord * asteroids[i].maxCoord;
             asteroidsActiveCount++;
-            
+
             asteroids[i].pos.x += asteroids[i].dpos.x;
             asteroids[i].pos.y += asteroids[i].dpos.y;
             asteroids[i].phi += asteroids[i].dphi;
-            
+
             screenWrap(&asteroids[i].pos, asteroids[i].maxCoord);
-            
+
             // Collision detection.  Weak detection first by using distance. Check for ship.
             if ( sqrDistance(&asteroids[i].pos, &ship.pos) < squareMax * 1.1
                 && polygonColision(&asteroids[i].coords, asteroids[i].nVertices, asteroids[i].phi, &asteroids[i].pos, &shipPoints, 4, ship.phi, &ship.pos))
             {
                 recallTime = 66;
                 showHitLines = 1;
-                
+
                 // Code here to stop player interaction and start game over.
             }
         }
@@ -315,12 +301,12 @@ myTimer(int value)
 
     if(asteroidsActiveCount < 1)
         spawnAsteroid(5);
-    
+
     /* test for and handle collisions */
 
     glutPostRedisplay();
-    
-    glutTimerFunc(recallTime, myTimer, value);		/* 30 frames per second */
+
+    glutTimerFunc(recallTime, mainTime, value);		/* 30 frames per second */
 }
 
 void
@@ -335,7 +321,7 @@ myKey(unsigned char key, int x, int y)
                     if (!photons[i].active) {
                         photons[i].active = 1;
                         ship.shotCooldown = SHIP_SHOT_COOLDOWN_MAX;
-						
+
                         break;
                     }
                 }
@@ -449,7 +435,7 @@ initAsteroid(
 
     double	theta, r;
     int		i;
-        
+
     a->pos.x = x;
     a->pos.y = y;
     a->phi = 0.0;
@@ -457,7 +443,7 @@ initAsteroid(
     a->dpos.x = myRandom(-0.8, 0.8);
     a->dpos.y = myRandom(-0.8, 0.8);
     a->dphi = myRandom(-0.2, 0.2);
-    
+
     a->nVertices = 6+rand()%(ASTEROIDS_MAX_VERTICES-6);
     for (i=0; i<a->nVertices; i++)
     {
@@ -467,7 +453,7 @@ initAsteroid(
         a->coords[i].x = -r*sin(theta);
         a->coords[i].y = r*cos(theta);
     }
-    
+
     a->active = 1;
 }
 
@@ -475,7 +461,7 @@ void
 drawShip(Ship *s)
 {
     int i;
-    
+
     COLOR_GL_LINE;
     glLoadIdentity();
     myTranslate2D(s->pos.x,s->pos.y);
@@ -513,7 +499,7 @@ void
 drawAsteroid(Asteroid *a)
 {
     int i;
-    
+
     COLOR_GL_LINE;
     glLoadIdentity();
     myTranslate2D(a->pos.x,a->pos.y);
@@ -585,15 +571,15 @@ screenWrap(Coords* position, int border)
         position->x = -border;
     else
         retVal--;
-    
-    
+
+
     if(position->y < -border)
         position->y = 100 + border;
     else if(position->y > 100 + border)
         position->y = -border;
     else
         retVal--;
-    
+
     return retVal;
 }
 
@@ -623,7 +609,7 @@ int sign(int x)
 int boxIntersect(Coords *a, Coords *b, Coords *c, Coords *d)
 {
     double min1, max1, min2, max2;
-    
+
     if(a->x < b->x)
     {
         min1 = a->x;
@@ -634,7 +620,7 @@ int boxIntersect(Coords *a, Coords *b, Coords *c, Coords *d)
         max1 = a->x;
         min1 = b->x;
     }
-    
+
     if(c->x < d->x)
     {
         min2 = c->x;
@@ -645,9 +631,9 @@ int boxIntersect(Coords *a, Coords *b, Coords *c, Coords *d)
         max2 = c->x;
         min2 = d->x;
     }
-    
+
     if (max1 < min2 || max2 < min1) return 0;
-    
+
     if(a->y < b->y)
     {
         min1 = a->y;
@@ -658,7 +644,7 @@ int boxIntersect(Coords *a, Coords *b, Coords *c, Coords *d)
         max1 = a->y;
         min1 = b->y;
     }
-    
+
     if(c->y < d->y)
     {
         min2 = c->y;
@@ -669,9 +655,9 @@ int boxIntersect(Coords *a, Coords *b, Coords *c, Coords *d)
         max2 = c->y;
         min2 = d->y;
     }
-    
+
     return !(max1 < min2 || max2 < min1);
-    
+
 }
 
 int lineColision(Coords *a, Coords *b, Coords *c, Coords *d)
@@ -679,7 +665,7 @@ int lineColision(Coords *a, Coords *b, Coords *c, Coords *d)
     double slope, constant;
     slope = (a->y - b->y) / (a->x - b->x);
     constant = a->y - slope * a->x;
-    
+
     return sign(slope * c->x + constant - c->y) != sign(slope * d->x + constant - d->y);
 }
 
@@ -704,7 +690,7 @@ int polygonColision(Coords *poly1, int size1, double phi1, Coords *pos1,
         {
             POINT_SETUP(b,phi1,poly1,i,pos1);
         }
-        
+
         for (j = 1; j <= size2; j++) {
             POINT_SETUP(c,phi2,poly2,j-1,pos2);
             if(j == size2)
@@ -732,9 +718,9 @@ double
 myRandom(double min, double max)
 {
 	double	d;
-	
+
 	/* return a random number uniformly draw from [min,max] */
 	d = min+(max-min)*(rand()%0x7fff)/32767.0;
-	
+
 	return d;
 }

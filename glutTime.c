@@ -23,7 +23,7 @@ char* strFps;
 
 void OnCallback(int value)
 {
-	
+
 	if(lastFps != currentFps)
 	{
 		lastFps = currentFps;
@@ -39,8 +39,8 @@ void SetupGlutTime()
 	lastFps = 0;
 	currentFps = 0;
 	strFps = (char*) malloc(sizeof(char) * 3);
-	strFps[0] = 'H';
-	strFps[1] = 'I';
+	strFps[0] = 0;
+	strFps[1] = 0;
 	strFps[2] = 0;
 	glutTimerFunc(1000, OnCallback, 0);
 }
