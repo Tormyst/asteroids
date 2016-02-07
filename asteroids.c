@@ -49,6 +49,8 @@
 #define SHIP_MAX_SPEED    3
 #define SHIP_SHOT_COOLDOWN_MAX 5
 
+#define SCREENSHAKE_DECAY 0.1;
+
 
 #define POINT_SETUP(out,phi,poly,index,pos) out.x = poly[index].x * cos(phi) + poly[index].y *-sin(phi) + pos->x; \
                                             out.y = poly[index].x * sin(phi) + poly[index].y * cos(phi) + pos->y;
@@ -111,6 +113,8 @@ static int screenWrap(Coords* position, int border);
 
 /* -- global variables ------------------------------------------------------ */
 
+double screenShake = 0;
+
 static int	up=0, down=0, left=0, right=0, firing=0;	/* state of cursor keys */
 static double	xMax, yMax;
 static Ship	ship;
@@ -157,34 +161,36 @@ main(int argc, char *argv[])
 void
 myDisplay()
 {
-    /*
-     *	display callback function
-     */
+  /*
+   *	display callback function
+   */
 
-    int	i;
-	OnFrame();
+  int	i;
+  OnFrame();
 
   glClear(GL_COLOR_BUFFER_BIT);
 
   glLoadIdentity();
+  myTranslate2D(myRandom(-screenShake, screenShake), myRandom(-screenShake, screenShake));
+  glPushMatrix();
 
-switch (state) {
-  case GameState_StartScreen:
-    setMaxShake(5);
-    DisplayString("Asteroids",8,8,7,70);
-    setMaxShake(7);
-    DisplayString("Press space to start",2.5,2.5,17.5,30);
-    break;
-  case GameState_Dead:
-    setMaxShake(5);
-    DisplayString("You are dead", 5,5,12.5,60);
-    setMaxShake(7);
-    DisplayString("Press space to not be dead",2.5,2.5,8,30);
-    break;
-  case GameState_Playing:
-    setMaxShake(0.3);
-    drawShip(&ship);
-    break;
+  switch (state) {
+    case GameState_StartScreen:
+      setMaxShake(5);
+      DisplayString("Asteroids",8,8,7,70);
+      setMaxShake(7);
+      DisplayString("Press space to start",2.5,2.5,17.5,30);
+      break;
+    case GameState_Dead:
+      setMaxShake(5);
+      DisplayString("You are dead", 5,5,12.5,60);
+      setMaxShake(7);
+      DisplayString("Press space to not be dead",2.5,2.5,8,30);
+      break;
+    case GameState_Playing:
+      setMaxShake(0.3);
+      drawShip(&ship);
+      break;
   }
 
   for (i=0; i<MAX_PHOTONS; i++)
@@ -198,7 +204,6 @@ switch (state) {
 
   if(showHitLines)
   {
-      glLoadIdentity();
       glBegin(GL_LINES);
       glColor3f(1.0,0.0,0.0);
       glVertex2d(hitA.x, hitA.y);
@@ -208,11 +213,12 @@ switch (state) {
       glEnd();
   }
 
-	glLoadIdentity();
 	COLOR_GL_LINE;
+  setMaxShake(5);
 	DisplayString(GetFPS(),3,3,93,4);
+  glPopMatrix();
 
-    glutSwapBuffers();
+  glutSwapBuffers();
 }
 
 void
@@ -226,6 +232,8 @@ mainTime(int value)
     /* reset some state values */
 
     showHitLines = 0;
+    screenShake -= SCREENSHAKE_DECAY;
+    if(screenShake < 0) screenShake = 0;
 
     /* advance the ship */
     if(state == GameState_Playing)
@@ -278,6 +286,8 @@ mainTime(int value)
                     photons[i].active = 0;
                     if (asteroids[j].maxCoord > 5)
                         spawnAsteroidSpecific((rand() % 2 + 2), asteroids[j].pos.x, asteroids[j].pos.y, myRandom(2,5));
+
+                    screenShake += 2;
                 }
             }
 
@@ -318,6 +328,7 @@ mainTime(int value)
             {
                 recallTime = 66;
                 showHitLines = 1;
+                screenShake += 5;
                 state = GameState_Dead;
                 // Code here to stop player interaction and start game over.
             }
@@ -518,8 +529,8 @@ drawShip(Ship *s)
 {
     int i;
 
+    glPushMatrix();
     COLOR_GL_LINE;
-    glLoadIdentity();
     myTranslate2D(s->pos.x,s->pos.y);
     myRotate2D(s->phi);
     glBegin(GL_LINES);
@@ -537,13 +548,13 @@ drawShip(Ship *s)
         }
     }
     glEnd();
+    glPopMatrix();
 }
 
 void
 drawPhoton(Photon *p)
 {
     COLOR_GL_DOT;
-    glLoadIdentity();
     glBegin(GL_POINTS);
         glVertex2f(p->pos.x,p->pos.y);
     glEnd();
@@ -555,7 +566,7 @@ drawAsteroid(Asteroid *a)
     int i;
 
     COLOR_GL_LINE;
-    glLoadIdentity();
+    glPushMatrix();
     myTranslate2D(a->pos.x,a->pos.y);
     myRotate2D(a->phi);
     glBegin(GL_LINES);
@@ -564,6 +575,7 @@ drawAsteroid(Asteroid *a)
     }
     drawLineWithShake(a->coords[a->nVertices-1].x, a->coords[a->nVertices-1].y, a->coords[0].x, a->coords[0].y);
     glEnd();
+    glPopMatrix();
 }
 
 /* -- spawning function ----------------------------------------------------- */
