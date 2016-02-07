@@ -38,6 +38,9 @@
 
 #define MAX_PHOTONS     8
 #define MAX_ASTEROIDS	  8
+#define MAX_DUSTS      30
+
+#define DUST_FRAME_DESPAWN 90
 
 #define ASTEROIDS_MAX_VERTICES	16
 #define ASTEROIDS_SPAWN_MIN 2
@@ -63,22 +66,27 @@ typedef struct Coords {
 } Coords;
 
 typedef struct {
-    Coords pos, dpos;
+  Coords pos, dpos;
 	double	phi;
-    int showFire, shotCooldown;
+  int showFire, shotCooldown;
 } Ship;
 
 typedef struct {
-    Coords pos, dpos;
+  Coords pos, dpos;
 	int	active;
 } Photon;
 
 typedef struct {
-    Coords pos, dpos;
+  Coords pos, dpos;
 	int	active, nVertices;
 	double	phi, dphi, maxCoord;
 	Coords	coords[ASTEROIDS_MAX_VERTICES];
 } Asteroid;
+
+typedef struct {
+  Coords pos1, pos2, dpos;
+  int active, frame;
+} Dust; // Not the Dust from His Dark Materials. Ha, jokes no one will get.
 
 typedef enum {GameState_StartScreen, GameState_Playing, GameState_Dead} GameState;
 
@@ -98,9 +106,11 @@ static void	myReshape(int w, int h);
 static void	init(void);
 static void initPlay(void);
 static void	initAsteroid(Asteroid *a, double x, double y, double size);
+static void initDustFromAsteroid(Asteroid *a);
 static void	drawShip(Ship *s);
 static void	drawPhoton(Photon *p);
 static void	drawAsteroid(Asteroid *a);
+static void drawDust(Dust *d);
 
 static void spawnAsteroidSpecific(int count, int x, int y, double size);
 static void spawnAsteroid(int count);
@@ -120,6 +130,7 @@ static double	xMax, yMax;
 static Ship	ship;
 static Photon	photons[MAX_PHOTONS];
 static Asteroid	asteroids[MAX_ASTEROIDS];
+static Dust dusts[MAX_DUSTS];
 static GameState state;
 
 /* -- added effect on death ------------------------------------------------- */
@@ -195,12 +206,17 @@ myDisplay()
 
   for (i=0; i<MAX_PHOTONS; i++)
   	if (photons[i].active)
-          drawPhoton(&photons[i]);
+      drawPhoton(&photons[i]);
 
   setMaxShake(0);
   for (i=0; i<MAX_ASTEROIDS; i++)
   	if (asteroids[i].active)
-          drawAsteroid(&asteroids[i]);
+      drawAsteroid(&asteroids[i]);
+
+  setMaxShake(3);
+  for (i = 0; i < MAX_DUSTS; i++)
+    if(dusts[i].active)
+      drawDust(&dusts[i]);
 
   if(showHitLines)
   {
@@ -283,6 +299,7 @@ mainTime(int value)
                 if(asteroids[j].active && sqrDistance(&asteroids[j].pos, &photons[i]) < asteroids[j].maxCoord * asteroids[j].maxCoord * 1.1 && polygonColision(&asteroids[j].coords, asteroids[j].nVertices, asteroids[j].phi, &asteroids[j].pos, &lineFromPoint, 2, 0, &zero))
                 {
                     asteroids[j].active = 0;
+                    initDustFromAsteroid(&asteroids[j]);
                     photons[i].active = 0;
                     if (asteroids[j].maxCoord > 5)
                         spawnAsteroidSpecific((rand() % 2 + 2), asteroids[j].pos.x, asteroids[j].pos.y, myRandom(2,5));
@@ -296,6 +313,7 @@ mainTime(int value)
         {
             // Used to delay movement for 1 frame.
             // Which improves game feel by having the bullet spawn on your ship before moving.
+            // But we need to set up some values here.
             photons[i].active++;
             photons[i].pos.x = ship.pos.x + 2 * -sin(ship.phi);
             photons[i].pos.y = ship.pos.y + 2 *  cos(ship.phi);
@@ -333,6 +351,24 @@ mainTime(int value)
                 // Code here to stop player interaction and start game over.
             }
         }
+    }
+
+    // Dust is purly a visual.
+    for (i = 0; i < MAX_DUSTS; i++)
+    {
+      if(dusts[i].active)
+      {
+        dusts[i].frame++;
+        if(dusts[i].frame > DUST_FRAME_DESPAWN)
+        {
+          dusts[i].active = 0;
+          continue;
+        }
+        dusts[i].pos1.x += dusts[i].dpos.x;
+        dusts[i].pos1.y += dusts[i].dpos.y;
+        dusts[i].pos2.x += dusts[i].dpos.x;
+        dusts[i].pos2.y += dusts[i].dpos.y;
+      }
     }
 
     if(asteroidsActiveCount < 1)
@@ -524,6 +560,36 @@ initAsteroid(
     a->active = 1;
 }
 
+void initDustFromAsteroid(Asteroid *a)
+{
+  int dustCounter, polyCounter = 1;
+
+  for(dustCounter = 0; dustCounter < MAX_DUSTS; dustCounter++)
+  {
+    if(!dusts[dustCounter].active)
+    {
+      printf("Dust Spawning\n");
+      dusts[dustCounter].active = 1;
+      dusts[dustCounter].frame = 0;
+      if(polyCounter < a->nVertices)
+      {
+        POINT_SETUP(dusts[dustCounter].pos1,a->phi, a->coords,polyCounter - 1, (&a->pos));
+        POINT_SETUP(dusts[dustCounter].pos2,a->phi, a->coords,polyCounter, (&a->pos));
+      }
+      else
+      {
+        POINT_SETUP(dusts[dustCounter].pos1,a->phi, a->coords,polyCounter - 1, (&a->pos));
+        POINT_SETUP(dusts[dustCounter].pos2,a->phi, a->coords,0, (&a->pos));
+      }
+      dusts[dustCounter].dpos.x = a->dpos.x + myRandom(-0.3, 0.3);
+      dusts[dustCounter].dpos.y = a->dpos.y + myRandom(-0.3, 0.3);
+      polyCounter++;
+    }
+    if(polyCounter > a->nVertices)
+      break;
+  }
+}
+
 void
 drawShip(Ship *s)
 {
@@ -576,6 +642,15 @@ drawAsteroid(Asteroid *a)
     drawLineWithShake(a->coords[a->nVertices-1].x, a->coords[a->nVertices-1].y, a->coords[0].x, a->coords[0].y);
     glEnd();
     glPopMatrix();
+}
+
+void drawDust(Dust *d)
+{
+  double colorToDisplay = 0.9 - d->frame * 0.01;
+  glColor3f( colorToDisplay, colorToDisplay, colorToDisplay );
+  glBegin(GL_LINES);
+  drawLineWithShake(d->pos1.x, d->pos1.y, d->pos2.x, d->pos2.y);
+  glEnd();
 }
 
 /* -- spawning function ----------------------------------------------------- */
