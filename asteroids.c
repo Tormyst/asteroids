@@ -3,8 +3,6 @@
  *
  *	skeleton code for an OpenGL implementation of the Asteroids video game
  */
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,9 +49,12 @@
 #define SHIP_SPEEDUP_FRAME_INCREMENT 0.005
 #define SHIP_MAX_SPEED    3
 #define SHIP_SHOT_COOLDOWN_MAX 5
+#define SHIP_INVINCIBILITY_SEC 3
+#define SHIP_STARTING_LIVES    3
 
 #define SCREENSHAKE_DECAY 0.1;
 
+#define DYING_FRAMES 0;
 
 #define POINT_SETUP(out,phi,poly,index,pos) out.x = poly[index].x * cos(phi) + poly[index].y *-sin(phi) + pos->x; \
                                             out.y = poly[index].x * sin(phi) + poly[index].y * cos(phi) + pos->y;
@@ -68,7 +69,7 @@ typedef struct Coords {
 typedef struct {
   Coords pos, dpos;
 	double	phi;
-  int showFire, shotCooldown;
+  int showFire, shotCooldown, lives;
 } Ship;
 
 typedef struct {
@@ -88,7 +89,7 @@ typedef struct {
   int active, frame;
 } Dust; // Not the Dust from His Dark Materials. Ha, jokes no one will get.
 
-typedef enum {GameState_StartScreen, GameState_Playing, GameState_Dead} GameState;
+typedef enum {GameState_StartScreen, GameState_Playing, GameState_Dying, GameState_Dead} GameState;
 
 /* -- ship points ----------------------------------------------------------- */
 
@@ -111,6 +112,7 @@ static void	drawShip(Ship *s);
 static void	drawPhoton(Photon *p);
 static void	drawAsteroid(Asteroid *a);
 static void drawDust(Dust *d);
+static void drawUI();
 
 static void spawnAsteroidSpecific(int count, int x, int y, double size);
 static void spawnAsteroid(int count);
@@ -132,6 +134,7 @@ static Photon	photons[MAX_PHOTONS];
 static Asteroid	asteroids[MAX_ASTEROIDS];
 static Dust dusts[MAX_DUSTS];
 static GameState state;
+static int stateCounter;
 
 /* -- added effect on death ------------------------------------------------- */
 static Coords hitA, hitB, hitC, hitD;
@@ -230,8 +233,7 @@ myDisplay()
   }
 
 	COLOR_GL_LINE;
-  setMaxShake(5);
-	DisplayString(GetFPS(),3,3,93,4);
+  drawUI();
   glPopMatrix();
 
   glutSwapBuffers();
@@ -347,7 +349,9 @@ mainTime(int value)
                 recallTime = 66;
                 showHitLines = 1;
                 screenShake += 5;
-                state = GameState_Dead;
+                ship.lives--;
+                state = GameState_Dying;
+                stateCounter = DYING_FRAMES;
                 // Code here to stop player interaction and start game over.
             }
         }
@@ -378,6 +382,25 @@ mainTime(int value)
 
     glutPostRedisplay();
 
+    if(state == GameState_Dying)
+    {
+      if(stateCounter <= 0)
+      {
+        if(ship.lives > 0)
+        {
+          state = GameState_Playing;
+          ship.pos.x = 50;
+          ship.pos.y = 50;
+          ship.dpos.x = 0;
+          ship.dpos.y = 0;
+          ship.phi = 0;
+        }
+        else
+          state = GameState_Dead;
+      }
+      recallTime = 66;
+
+    }
     glutTimerFunc(recallTime, mainTime, value);		/* 30 frames per second */
 }
 
@@ -512,6 +535,7 @@ initPlay()
   ship.dpos.y = 0;
   ship.phi = 0;
   ship.shotCooldown = 0;
+  ship.lives = SHIP_STARTING_LIVES;
   state = GameState_Playing;
 
   for (i = 0; i < MAX_PHOTONS; i++)
@@ -651,6 +675,26 @@ void drawDust(Dust *d)
   glBegin(GL_LINES);
   drawLineWithShake(d->pos1.x, d->pos1.y, d->pos2.x, d->pos2.y);
   glEnd();
+}
+
+void drawUI()
+{
+  int i, j;
+  setMaxShake(5);
+  DisplayString(GetFPS(),3,3,93,4);
+  setMaxShake(0.3);
+  for(i = 0; i < ship.lives; i++)
+  {
+    glPushMatrix();
+    myTranslate2D(3+3*i,95);
+    glBegin(GL_LINES);
+    for (j = 1; j < 4; j++) {
+        drawLineWithShake(shipPoints[j-1].x, shipPoints[j-1].y,shipPoints[j].x, shipPoints[j].y);
+    }
+    drawLineWithShake(shipPoints[3].x, shipPoints[3].y,shipPoints[0].x, shipPoints[0].y);
+    glEnd();
+    glPopMatrix();
+  }
 }
 
 /* -- spawning function ----------------------------------------------------- */
