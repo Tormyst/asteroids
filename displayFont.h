@@ -3,6 +3,4 @@
 
 void DisplayString(char* str, double widthPerCharacter, double hightPerCharacter, double xTransform, double yTransform);
 
-void setMaxShake(int newValue);
-
 #endif //DISPLAY_FONT_H

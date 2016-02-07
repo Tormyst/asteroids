@@ -19,6 +19,8 @@
 
 #include "displayFont.h"
 #include "glutTime.h"
+#include "shake.h"
+#include "util.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -35,7 +37,7 @@
 #define COLOR_GL_DOT glColor3f( 1.0, 1.0, 1.0 )
 
 #define MAX_PHOTONS     8
-#define MAX_ASTEROIDS	8
+#define MAX_ASTEROIDS	  8
 
 #define ASTEROIDS_MAX_VERTICES	16
 #define ASTEROIDS_SPAWN_MIN 2
@@ -76,6 +78,8 @@ typedef struct {
 	Coords	coords[ASTEROIDS_MAX_VERTICES];
 } Asteroid;
 
+typedef enum {GameState_StartScreen, GameState_Playing, GameState_Dead} GameState;
+
 /* -- ship points ----------------------------------------------------------- */
 
 static const Coords shipPoints[] = { { 0, 2}, {1.2, -1.6}, {0, -1}, {-1.2, -1.6} };
@@ -90,6 +94,7 @@ static void	keyRelease(int key, int x, int y);
 static void	myReshape(int w, int h);
 
 static void	init(void);
+static void initPlay(void);
 static void	initAsteroid(Asteroid *a, double x, double y, double size);
 static void	drawShip(Ship *s);
 static void	drawPhoton(Photon *p);
@@ -98,7 +103,6 @@ static void	drawAsteroid(Asteroid *a);
 static void spawnAsteroidSpecific(int count, int x, int y, double size);
 static void spawnAsteroid(int count);
 
-static double myRandom(double min, double max);
 static double sqrDistance(Coords* a, Coords* b);
 static int polygonColision(Coords *poly1, int size1, double phi1, Coords *pos1,
                            Coords *poly2, int size2, double phi2, Coords *pos2);
@@ -112,6 +116,7 @@ static double	xMax, yMax;
 static Ship	ship;
 static Photon	photons[MAX_PHOTONS];
 static Asteroid	asteroids[MAX_ASTEROIDS];
+static GameState state;
 
 /* -- added effect on death ------------------------------------------------- */
 static Coords hitA, hitB, hitC, hitD;
@@ -163,12 +168,30 @@ myDisplay()
 
   glLoadIdentity();
 
-  drawShip(&ship);
+switch (state) {
+  case GameState_StartScreen:
+    setMaxShake(5);
+    DisplayString("Asteroids",8,8,7,70);
+    setMaxShake(7);
+    DisplayString("Press space to start",2.5,2.5,17.5,30);
+    break;
+  case GameState_Dead:
+    setMaxShake(5);
+    DisplayString("You are dead", 5,5,12.5,60);
+    setMaxShake(7);
+    DisplayString("Press space to not be dead",2.5,2.5,8,30);
+    break;
+  case GameState_Playing:
+    setMaxShake(0.3);
+    drawShip(&ship);
+    break;
+  }
 
   for (i=0; i<MAX_PHOTONS; i++)
   	if (photons[i].active)
           drawPhoton(&photons[i]);
 
+  setMaxShake(0);
   for (i=0; i<MAX_ASTEROIDS; i++)
   	if (asteroids[i].active)
           drawAsteroid(&asteroids[i]);
@@ -205,6 +228,7 @@ mainTime(int value)
     showHitLines = 0;
 
     /* advance the ship */
+    if(state == GameState_Playing)
     {
         double speed, da;
         ship.phi += (left * SHIP_MAX_ROTATION) - (right * SHIP_MAX_ROTATION);
@@ -288,12 +312,13 @@ mainTime(int value)
             screenWrap(&asteroids[i].pos, asteroids[i].maxCoord);
 
             // Collision detection.  Weak detection first by using distance. Check for ship.
-            if ( sqrDistance(&asteroids[i].pos, &ship.pos) < squareMax * 1.1
+            if ( state == GameState_Playing
+                && sqrDistance(&asteroids[i].pos, &ship.pos) < squareMax * 1.1
                 && polygonColision(&asteroids[i].coords, asteroids[i].nVertices, asteroids[i].phi, &asteroids[i].pos, &shipPoints, 4, ship.phi, &ship.pos))
             {
                 recallTime = 66;
                 showHitLines = 1;
-
+                state = GameState_Dead;
                 // Code here to stop player interaction and start game over.
             }
         }
@@ -314,29 +339,39 @@ myKey(unsigned char key, int x, int y)
 {
     switch (key) {
         case ' ':
-            if(ship.shotCooldown <= 0)
-            {
-                int i;
-                for (i = 0; i < MAX_PHOTONS; i++) {
-                    if (!photons[i].active) {
-                        photons[i].active = 1;
-                        ship.shotCooldown = SHIP_SHOT_COOLDOWN_MAX;
+          switch (state) {
+            case GameState_Playing:
+              if(ship.shotCooldown <= 0)
+              {
+                  int i;
+                  for (i = 0; i < MAX_PHOTONS; i++) {
+                      if (!photons[i].active) {
+                          photons[i].active = 1;
+                          ship.shotCooldown = SHIP_SHOT_COOLDOWN_MAX;
 
-                        break;
-                    }
-                }
-            }
-            break;
-        case 'a':
-        {
-            int i;
-            Coords thing;
-            for (i = 0; i <4; i++) {
-                POINT_SETUP(thing,ship.phi,shipPoints,i,(&ship.pos));
-                printf("Point %d: %f %f\n", i, thing.x, thing.y);
-            }
-            break;
-        }
+                          break;
+                      }
+                  }
+              }
+              break;
+            case GameState_StartScreen:
+              initPlay();
+              break;
+            case GameState_Dead:
+             state = GameState_StartScreen;
+             break;
+          }
+          break;
+        // case 'a':
+        // {
+        //     int i;
+        //     Coords thing;
+        //     for (i = 0; i <4; i++) {
+        //         POINT_SETUP(thing,ship.phi,shipPoints,i,(&ship.pos));
+        //         printf("Point %d: %f %f\n", i, thing.x, thing.y);
+        //     }
+        //     break;
+        // }
         default:
             break;
     }
@@ -410,15 +445,36 @@ myReshape(int w, int h)
 void
 init()
 {
-    ship.pos.x = 50;
-    ship.pos.y = 50;
-    glPointSize(2);
-    glEnable(GL_POINT_SMOOTH);
-    /*
-     * set parameters including the numbers of asteroids and photons present,
-     * the maximum velocity of the ship, the velocity of the laser shots, the
-     * ship's coordinates and velocity, etc.
-     */
+  state = GameState_StartScreen;
+  glPointSize(2);
+  glEnable(GL_POINT_SMOOTH);
+  /*
+   * set parameters including the numbers of asteroids and photons present,
+   * the maximum velocity of the ship, the velocity of the laser shots, the
+   * ship's coordinates and velocity, etc.
+   */
+}
+
+void
+initPlay()
+{
+  int i;
+  ship.pos.x = 50;
+  ship.pos.y = 50;
+  ship.dpos.x = 0;
+  ship.dpos.y = 0;
+  ship.phi = 0;
+  ship.shotCooldown = 0;
+  state = GameState_Playing;
+
+  for (i = 0; i < MAX_PHOTONS; i++)
+  {
+    photons[i].active = 0;
+  }
+  for (i = 0; i < MAX_ASTEROIDS; i++)
+  {
+    asteroids[i].active = 0;
+  }
 }
 
 void
@@ -466,23 +522,21 @@ drawShip(Ship *s)
     glLoadIdentity();
     myTranslate2D(s->pos.x,s->pos.y);
     myRotate2D(s->phi);
-    glBegin(GL_LINE_LOOP);
-    for (i = 0; i < 4; i++) {
-        glVertex2f(shipPoints[i].x, shipPoints[i].y);
+    glBegin(GL_LINES);
+    for (i = 1; i < 4; i++) {
+        drawLineWithShake(shipPoints[i-1].x, shipPoints[i-1].y,shipPoints[i].x, shipPoints[i].y);
     }
-    glEnd();
+    drawLineWithShake(shipPoints[3].x, shipPoints[3].y,shipPoints[0].x, shipPoints[0].y);
     if(up || down)
     {
         s->showFire = !s->showFire;
         if(s->showFire)
         {
-            glBegin(GL_LINE_STRIP);
-            glVertex2f(-0.3, -0.65);
-            glVertex2f(0, - 1);
-            glVertex2f(0.3, -0.65);
-            glEnd();
+            drawLineWithShake(-0.6, -1.3, 0, -3);
+            drawLineWithShake(0, -3, 0.6, -1.3);
         }
     }
+    glEnd();
 }
 
 void
@@ -504,10 +558,11 @@ drawAsteroid(Asteroid *a)
     glLoadIdentity();
     myTranslate2D(a->pos.x,a->pos.y);
     myRotate2D(a->phi);
-    glBegin(GL_LINE_LOOP);
-    for (i = 0; i < a->nVertices; i++) {
-        glVertex2d(a->coords[i].x, a->coords[i].y);
+    glBegin(GL_LINES);
+    for (i = 1; i < a->nVertices; i++) {
+        drawLineWithShake(a->coords[i-1].x, a->coords[i-1].y, a->coords[i].x, a->coords[i].y);
     }
+    drawLineWithShake(a->coords[a->nVertices-1].x, a->coords[a->nVertices-1].y, a->coords[0].x, a->coords[0].y);
     glEnd();
 }
 
@@ -712,15 +767,4 @@ int polygonColision(Coords *poly1, int size1, double phi1, Coords *pos1,
         }
     }
                return 0;
-}
-
-double
-myRandom(double min, double max)
-{
-	double	d;
-
-	/* return a random number uniformly draw from [min,max] */
-	d = min+(max-min)*(rand()%0x7fff)/32767.0;
-
-	return d;
 }

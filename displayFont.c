@@ -7,60 +7,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "displayFont.h"
-
-int MaxLetterShake = 5;
-
-int shakeX;
-int shakeY;
-void setShake()
-{
-    if( MaxLetterShake !=0 )
-    {
-        shakeX = (rand() % MaxLetterShake*2) - MaxLetterShake;
-        shakeY = (rand() % MaxLetterShake*2) - MaxLetterShake;
-    }
-    else
-    {
-        shakeX = shakeY = 0;
-    }
-}
-
-void setMaxShake(int newValue)
-{
-	MaxLetterShake = newValue;
-}
-
-void drawLineWithShake(double x1, double y1, double x2, double y2)
-{
-    setShake();
-    glVertex2f( x1 + shakeX, y1 + shakeY);
-    glVertex2f( x2 + shakeX, y2 + shakeY);
-}
+#include "shake.h"
 
 void A()
 {
         drawLineWithShake(-100.0, -100.0, -100.0, 50.0 );
-    
+
         drawLineWithShake(-100.0, 50.0, 0.0, 100.0 );
-    
+
         drawLineWithShake( 0.0, 100.0, 100.0, 50.0 );
-    
+
         drawLineWithShake( 100.0, 50.0, 100.0, -100.0 );
-    
+
         drawLineWithShake(-100.0, -50.0, 100.0, -50.0 );
 }
 void B()
 {
     drawLineWithShake(-100.0, -100.0, -100.0, 100.0 );
-    
+
     drawLineWithShake(-100.0, -100.0, 50.0, -100.0 );
     drawLineWithShake(-100.0,    0.0, 50.0,    0.0 );
     drawLineWithShake(-100.0,  100.0, 50.0,  100.0 );
-    
+
     drawLineWithShake( 50.0, 100.0, 100.0, 66.6 );
     drawLineWithShake( 100.0, 66.6, 100.0, 33.3 );
     drawLineWithShake( 100.0, 33.0, 50.0, 0.0 );
-    
+
     drawLineWithShake( 50.0, 0.0, 100.0, -33.3 );
     drawLineWithShake( 100.0, -33.3, 100.0, -66.6 );
     drawLineWithShake( 100.0, -66.6, 50.0, -100.0 );
@@ -435,4 +407,3 @@ void DisplayString(char* str, double widthPerCharacter, double hightPerCharacter
 		placement++;
     }
 }
-
