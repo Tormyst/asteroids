@@ -35,8 +35,8 @@
 #define COLOR_GL_DOT glColor3f( 1.0, 1.0, 1.0 )
 
 #define MAX_PHOTONS     8
-#define MAX_ASTEROIDS	  8
-#define MAX_DUSTS      30
+#define MAX_ASTEROIDS	 15
+#define MAX_DUSTS      50
 
 #define DUST_FRAME_DESPAWN 90
 
@@ -46,15 +46,15 @@
 
 #define SHIP_MAX_ROTATION 0.3
 #define SHIP_ACCELERATION 0.2
-#define SHIP_SPEEDUP_FRAME_INCREMENT 0.005
 #define SHIP_MAX_SPEED    3
 #define SHIP_SHOT_COOLDOWN_MAX 5
-#define SHIP_INVINCIBILITY_SEC 3
+#define SHIP_INVINCIBILITY_FRAMES 60
 #define SHIP_STARTING_LIVES    3
 
-#define SCREENSHAKE_DECAY 0.1;
+#define SCREENSHAKE_DECAY 0.1
 
-#define DYING_FRAMES 0;
+#define DYING_FRAMES 60
+#define DYING_DUST_FRAMES 10
 
 #define POINT_SETUP(out,phi,poly,index,pos) out.x = poly[index].x * cos(phi) + poly[index].y *-sin(phi) + pos->x; \
                                             out.y = poly[index].x * sin(phi) + poly[index].y * cos(phi) + pos->y;
@@ -66,10 +66,17 @@ typedef struct Coords {
 	double		x, y;
 } Coords;
 
+/*
+  State explanations:
+    PlayState_Normal this is normal control of your ship.  You can shoot, and move normaly.
+*/
+typedef enum {ShipState_Normal} ShipState;
+
 typedef struct {
   Coords pos, dpos;
 	double	phi;
-  int showFire, shotCooldown, lives;
+  int showFire, shotCooldown, lives, invincible;
+  ShipState state;
 } Ship;
 
 typedef struct {
@@ -89,6 +96,14 @@ typedef struct {
   int active, frame;
 } Dust; // Not the Dust from His Dark Materials. Ha, jokes no one will get.
 
+/*
+  State explanations:
+    GameState_StartScreen is the main screen you start the game on.  Has asteroids in the backgroud, has title.
+    GameState_Playing is the main state of the game.  As long as this state is in play, the player has control.
+    GameState_Dying is the animation of the player dying.  The player loses control and must wait to respawn,
+      or be declared dead.
+    GameState_Dead is the game over screen state.  High score and such should be delt with here.
+*/
 typedef enum {GameState_StartScreen, GameState_Playing, GameState_Dying, GameState_Dead} GameState;
 
 /* -- ship points ----------------------------------------------------------- */
@@ -108,6 +123,7 @@ static void	init(void);
 static void initPlay(void);
 static void	initAsteroid(Asteroid *a, double x, double y, double size);
 static void initDustFromAsteroid(Asteroid *a);
+static void initDustFromShip(Ship *s);
 static void	drawShip(Ship *s);
 static void	drawPhoton(Photon *p);
 static void	drawAsteroid(Asteroid *a);
@@ -216,7 +232,7 @@ myDisplay()
   	if (asteroids[i].active)
       drawAsteroid(&asteroids[i]);
 
-  setMaxShake(3);
+  setMaxShake(1);
   for (i = 0; i < MAX_DUSTS; i++)
     if(dusts[i].active)
       drawDust(&dusts[i]);
@@ -278,7 +294,9 @@ mainTime(int value)
         screenWrap(&ship.pos, 2);
 
         if(ship.shotCooldown > 0)
-            ship.shotCooldown--;
+          ship.shotCooldown--;
+        if(ship.invincible > 0)
+          ship.invincible--;
     }
     /* advance photon laser shots, eliminating those that have gone past
       the window boundaries */
@@ -306,7 +324,7 @@ mainTime(int value)
                     if (asteroids[j].maxCoord > 5)
                         spawnAsteroidSpecific((rand() % 2 + 2), asteroids[j].pos.x, asteroids[j].pos.y, myRandom(2,5));
 
-                    screenShake += 2;
+                    screenShake = 2;
                 }
             }
 
@@ -343,6 +361,7 @@ mainTime(int value)
 
             // Collision detection.  Weak detection first by using distance. Check for ship.
             if ( state == GameState_Playing
+                && ship.invincible <= 0
                 && sqrDistance(&asteroids[i].pos, &ship.pos) < squareMax * 1.1
                 && polygonColision(&asteroids[i].coords, asteroids[i].nVertices, asteroids[i].phi, &asteroids[i].pos, &shipPoints, 4, ship.phi, &ship.pos))
             {
@@ -394,11 +413,17 @@ mainTime(int value)
           ship.dpos.x = 0;
           ship.dpos.y = 0;
           ship.phi = 0;
+          ship.invincible = SHIP_INVINCIBILITY_FRAMES;
         }
         else
           state = GameState_Dead;
       }
-      recallTime = 66;
+      if(stateCounter > DYING_FRAMES - DYING_DUST_FRAMES)
+      {
+        initDustFromShip(&ship);
+        recallTime = 66;
+      }
+      stateCounter--;
 
     }
     glutTimerFunc(recallTime, mainTime, value);		/* 30 frames per second */
@@ -534,6 +559,7 @@ initPlay()
   ship.dpos.x = 0;
   ship.dpos.y = 0;
   ship.phi = 0;
+  ship.invincible = SHIP_INVINCIBILITY_FRAMES;
   ship.shotCooldown = 0;
   ship.lives = SHIP_STARTING_LIVES;
   state = GameState_Playing;
@@ -592,7 +618,6 @@ void initDustFromAsteroid(Asteroid *a)
   {
     if(!dusts[dustCounter].active)
     {
-      printf("Dust Spawning\n");
       dusts[dustCounter].active = 1;
       dusts[dustCounter].frame = 0;
       if(polyCounter < a->nVertices)
@@ -605,13 +630,44 @@ void initDustFromAsteroid(Asteroid *a)
         POINT_SETUP(dusts[dustCounter].pos1,a->phi, a->coords,polyCounter - 1, (&a->pos));
         POINT_SETUP(dusts[dustCounter].pos2,a->phi, a->coords,0, (&a->pos));
       }
-      dusts[dustCounter].dpos.x = a->dpos.x + myRandom(-0.3, 0.3);
-      dusts[dustCounter].dpos.y = a->dpos.y + myRandom(-0.3, 0.3);
+      dusts[dustCounter].dpos.x = a->dpos.x + myRandom(-0.1, 0.1);
+      dusts[dustCounter].dpos.y = a->dpos.y + myRandom(-0.1, 0.1);
       polyCounter++;
     }
     if(polyCounter > a->nVertices)
-      break;
+      return;
   }
+  fprintf(stderr, "Ran out of dust");
+}
+
+void initDustFromShip(Ship *s)
+{
+  int dustCounter, polyCounter = 1;
+
+  for(dustCounter = 0; dustCounter < MAX_DUSTS; dustCounter++)
+  {
+    if(!dusts[dustCounter].active)
+    {
+      dusts[dustCounter].active = 1;
+      dusts[dustCounter].frame = -10; // I put this in later and it just worked to set this at -10 to extend it.
+      if(polyCounter < 4)
+      {
+        POINT_SETUP(dusts[dustCounter].pos1,s->phi, shipPoints,polyCounter - 1, (&s->pos));
+        POINT_SETUP(dusts[dustCounter].pos2,s->phi, shipPoints,polyCounter, (&s->pos));
+      }
+      else
+      {
+        POINT_SETUP(dusts[dustCounter].pos1,s->phi, shipPoints,polyCounter - 1, (&s->pos));
+        POINT_SETUP(dusts[dustCounter].pos2,s->phi, shipPoints,0, (&s->pos));
+      }
+      dusts[dustCounter].dpos.x = s->dpos.x + myRandom(-0.5, 0.5);
+      dusts[dustCounter].dpos.y = s->dpos.y + myRandom(-0.5, 0.5);
+      polyCounter++;
+    }
+    if(polyCounter > 4)
+      return;
+  }
+  fprintf(stderr, "Ran out of dust");
 }
 
 void
@@ -623,6 +679,10 @@ drawShip(Ship *s)
     COLOR_GL_LINE;
     myTranslate2D(s->pos.x,s->pos.y);
     myRotate2D(s->phi);
+    if(s->invincible/10 % 2)
+      glLineWidth(3);
+    else
+      glLineWidth(1);
     glBegin(GL_LINES);
     for (i = 1; i < 4; i++) {
         drawLineWithShake(shipPoints[i-1].x, shipPoints[i-1].y,shipPoints[i].x, shipPoints[i].y);
@@ -638,6 +698,7 @@ drawShip(Ship *s)
         }
     }
     glEnd();
+    glLineWidth(1);
     glPopMatrix();
 }
 
