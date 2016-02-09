@@ -36,7 +36,7 @@
 
 #define MAX_PHOTONS     8
 #define MAX_ASTEROIDS	 15
-#define MAX_DUSTS      50
+#define MAX_DUSTS      60
 
 #define DUST_FRAME_DESPAWN 90
 
@@ -114,6 +114,10 @@ static const Coords shipPoints[] = { { 0, 2}, {1.2, -1.6}, {0, -1}, {-1.2, -1.6}
 
 static void	myDisplay(void);
 static void	mainTime(int value);
+static void activateShip(Ship *s);
+static void activatePhoton(Photon *p);
+static void activateAsteroid(Asteroid *a);
+static void activateDust(Dust *d);
 static void	myKey(unsigned char key, int x, int y);
 static void	keyPress(int key, int x, int y);
 static void	keyRelease(int key, int x, int y);
@@ -265,139 +269,35 @@ mainTime(int value)
 
     /* reset some state values */
 
-    showHitLines = 0;
     screenShake -= SCREENSHAKE_DECAY;
     if(screenShake < 0) screenShake = 0;
 
     /* advance the ship */
     if(state == GameState_Playing)
-    {
-        double speed, da;
-        ship.phi += (left * SHIP_MAX_ROTATION) - (right * SHIP_MAX_ROTATION);
+      activateShip(&ship);
 
-		    da = (up * SHIP_ACCELERATION) - (down * SHIP_ACCELERATION);
+    /* advance asteroids and collide with ship */
 
-        ship.dpos.x += da * -sin(ship.phi);
-        ship.dpos.y += da * cos(ship.phi);
-
-        speed = sqrt(ship.dpos.x*ship.dpos.x + ship.dpos.y*ship.dpos.y);
-
-        if( speed > SHIP_MAX_SPEED ) // I am just going to add this here, add "&& !down" for big rigs mode.
-        {
-            ship.dpos.x = (ship.dpos.x / speed) * SHIP_MAX_SPEED;
-            ship.dpos.y = (ship.dpos.y / speed) * SHIP_MAX_SPEED;
-        }
-
-        ship.pos.x += ship.dpos.x;
-        ship.pos.y += ship.dpos.y;
-
-        screenWrap(&ship.pos, 2);
-
-        if(ship.shotCooldown > 0)
-          ship.shotCooldown--;
-        if(ship.invincible > 0)
-          ship.invincible--;
-    }
-    /* advance photon laser shots, eliminating those that have gone past
-      the window boundaries */
-    for (i = 0; i < MAX_PHOTONS; i++) {
-        if(photons[i].active >= 2)
-        {
-            Coords lineFromPoint[2], zero = {0,0};
-
-            lineFromPoint[0] = photons[i].pos;
-
-            photons[i].pos.x += photons[i].dpos.x;
-            photons[i].pos.y += photons[i].dpos.y;
-
-            lineFromPoint[1] = photons[i].pos;
-
-            if( screenWrap(&photons[i].pos, 2) )
-                photons[i].active = 0;
-            for (j = 0; j < MAX_ASTEROIDS; j++)
-            {
-                if(asteroids[j].active && sqrDistance(&asteroids[j].pos, &photons[i]) < asteroids[j].maxCoord * asteroids[j].maxCoord * 1.1 && polygonColision(&asteroids[j].coords, asteroids[j].nVertices, asteroids[j].phi, &asteroids[j].pos, &lineFromPoint, 2, 0, &zero))
-                {
-                    asteroids[j].active = 0;
-                    initDustFromAsteroid(&asteroids[j]);
-                    photons[i].active = 0;
-                    if (asteroids[j].maxCoord > 5)
-                        spawnAsteroidSpecific((rand() % 2 + 2), asteroids[j].pos.x, asteroids[j].pos.y, myRandom(2,5));
-
-                    screenShake = 2;
-                }
-            }
-
-        }
-        else if(photons[i].active == 1)
-        {
-            // Used to delay movement for 1 frame.
-            // Which improves game feel by having the bullet spawn on your ship before moving.
-            // But we need to set up some values here.
-            photons[i].active++;
-            photons[i].pos.x = ship.pos.x + 2 * -sin(ship.phi);
-            photons[i].pos.y = ship.pos.y + 2 *  cos(ship.phi);
-            photons[i].dpos.x = 4 * -sin(ship.phi) + ship.dpos.x;
-            photons[i].dpos.y = 4 * cos(ship.phi) + ship.dpos.y;
-			// Recoil
-			// ship.dpos.x += -sin(ship.phi) * -0.1;
-			// ship.dpos.y += cos(ship.phi) * -0.1;
-        }
-    }
-
-    /* advance asteroids */
-
-    for (i = 0; i < MAX_ASTEROIDS; i++) {
-        if(asteroids[i].active)
-        {
-            double squareMax = asteroids[i].maxCoord * asteroids[i].maxCoord;
-            asteroidsActiveCount++;
-
-            asteroids[i].pos.x += asteroids[i].dpos.x;
-            asteroids[i].pos.y += asteroids[i].dpos.y;
-            asteroids[i].phi += asteroids[i].dphi;
-
-            screenWrap(&asteroids[i].pos, asteroids[i].maxCoord);
-
-            // Collision detection.  Weak detection first by using distance. Check for ship.
-            if ( state == GameState_Playing
-                && ship.invincible <= 0
-                && sqrDistance(&asteroids[i].pos, &ship.pos) < squareMax * 1.1
-                && polygonColision(&asteroids[i].coords, asteroids[i].nVertices, asteroids[i].phi, &asteroids[i].pos, &shipPoints, 4, ship.phi, &ship.pos))
-            {
-                recallTime = 66;
-                showHitLines = 1;
-                screenShake += 5;
-                ship.lives--;
-                state = GameState_Dying;
-                stateCounter = DYING_FRAMES;
-                // Code here to stop player interaction and start game over.
-            }
-        }
-    }
+    for (i = 0; i < MAX_ASTEROIDS; i++)
+      if(asteroids[i].active)
+      {
+        activateAsteroid(&asteroids[i]);
+        asteroidsActiveCount++;
+      }
 
     // Dust is purly a visual.
     for (i = 0; i < MAX_DUSTS; i++)
-    {
       if(dusts[i].active)
-      {
-        dusts[i].frame++;
-        if(dusts[i].frame > DUST_FRAME_DESPAWN)
-        {
-          dusts[i].active = 0;
-          continue;
-        }
-        dusts[i].pos1.x += dusts[i].dpos.x;
-        dusts[i].pos1.y += dusts[i].dpos.y;
-        dusts[i].pos2.x += dusts[i].dpos.x;
-        dusts[i].pos2.y += dusts[i].dpos.y;
-      }
-    }
+        activateDust(&dusts[i]);
 
     if(asteroidsActiveCount < 1)
         spawnAsteroid(5);
 
-    /* test for and handle collisions */
+    /* advance photon laser shots, eliminating those that have gone past
+      the window boundaries and check for collisions with asteroids */
+    for (i = 0; i < MAX_PHOTONS; i++)
+      if (photons[i].active)
+        activatePhoton(&photons[i]);
 
     glutPostRedisplay();
 
@@ -413,6 +313,7 @@ mainTime(int value)
           ship.dpos.x = 0;
           ship.dpos.y = 0;
           ship.phi = 0;
+          ship.lives--;
           ship.invincible = SHIP_INVINCIBILITY_FRAMES;
         }
         else
@@ -427,6 +328,116 @@ mainTime(int value)
 
     }
     glutTimerFunc(recallTime, mainTime, value);		/* 30 frames per second */
+}
+
+static void activateShip(Ship *s)
+{
+  double speed, da;
+  s->phi += (left * SHIP_MAX_ROTATION) - (right * SHIP_MAX_ROTATION);
+
+  da = (up * SHIP_ACCELERATION) - (down * SHIP_ACCELERATION);
+
+  s->dpos.x += da * -sin(s->phi);
+  s->dpos.y += da * cos(s->phi);
+
+  speed = sqrt(s->dpos.x*s->dpos.x + s->dpos.y*s->dpos.y);
+
+  if( speed > SHIP_MAX_SPEED ) // I am just going to add this here, add "&& !down" for big rigs mode.
+  {
+      s->dpos.x = (s->dpos.x / speed) * SHIP_MAX_SPEED;
+      s->dpos.y = (s->dpos.y / speed) * SHIP_MAX_SPEED;
+  }
+
+  s->pos.x += s->dpos.x;
+  s->pos.y += s->dpos.y;
+
+  screenWrap(&s->pos, 2);
+
+  if(s->shotCooldown > 0)
+    s->shotCooldown--;
+  if(s->invincible > 0)
+    s->invincible--;
+}
+static void activatePhoton(Photon *p)
+{
+  if(p->active >= 2)
+  {
+    int j;
+      Coords lineFromPoint[2], zero = {0,0};
+
+      lineFromPoint[0] = p->pos;
+
+      p->pos.x += p->dpos.x;
+      p->pos.y += p->dpos.y;
+
+      lineFromPoint[1] = p->pos;
+
+      if( screenWrap(&p->pos, 2) )
+          p->active = 0;
+      for (j = 0; j < MAX_ASTEROIDS; j++)
+      {
+          if(asteroids[j].active && sqrDistance(&asteroids[j].pos, p) < asteroids[j].maxCoord * asteroids[j].maxCoord * 1.5 && polygonColision(&asteroids[j].coords, asteroids[j].nVertices, asteroids[j].phi, &asteroids[j].pos, &lineFromPoint, 2, 0, &zero))
+          {
+              asteroids[j].active = 0;
+              initDustFromAsteroid(&asteroids[j]);
+              p->active = 0;
+              if (asteroids[j].maxCoord > 5)
+                  spawnAsteroidSpecific((rand() % 2 + 2), asteroids[j].pos.x, asteroids[j].pos.y, myRandom(2,5));
+
+              screenShake = 2;
+          }
+      }
+
+  }
+  else if(p->active == 1)
+  {
+      // Used to delay movement for 1 frame.
+      // Which improves game feel by having the bullet spawn on your ship before moving.
+      // But we need to set up some values here.
+      p->active++;
+      p->pos.x = ship.pos.x + 2 * -sin(ship.phi);
+      p->pos.y = ship.pos.y + 2 *  cos(ship.phi);
+      p->dpos.x = 4 * -sin(ship.phi) + ship.dpos.x;
+      p->dpos.y = 4 * cos(ship.phi) + ship.dpos.y;
+// Recoil
+// ship.dpos.x += -sin(ship.phi) * -0.1;
+// ship.dpos.y += cos(ship.phi) * -0.1;
+  }
+}
+static void activateAsteroid(Asteroid *a)
+{
+  double squareMax = a->maxCoord * a->maxCoord;
+
+  a->pos.x += a->dpos.x;
+  a->pos.y += a->dpos.y;
+  a->phi += a->dphi;
+
+  screenWrap(&a->pos, a->maxCoord);
+
+  // Collision detection.  Weak detection first by using distance. Check for ship.
+  if ( state == GameState_Playing
+      && ship.invincible <= 0
+      && sqrDistance(&a->pos, &ship.pos) < squareMax * 1.5
+      && polygonColision(&a->coords, a->nVertices, a->phi, &a->pos, &shipPoints, 4, ship.phi, &ship.pos))
+  {
+      showHitLines = 1;
+      screenShake += 5;
+      state = GameState_Dying;
+      stateCounter = DYING_FRAMES;
+  }
+}
+static void activateDust(Dust *d)
+{
+  d->frame++;
+  if(d->frame > DUST_FRAME_DESPAWN)
+  {
+    d->active = 0;
+    return;
+  }
+  d->pos1.x += d->dpos.x;
+  d->pos1.y += d->dpos.y;
+  d->pos2.x += d->dpos.x;
+  d->pos2.y += d->dpos.y;
 }
 
 void
@@ -744,7 +755,7 @@ void drawUI()
   setMaxShake(5);
   DisplayString(GetFPS(),3,3,93,4);
   setMaxShake(0.3);
-  for(i = 0; i < ship.lives; i++)
+  for(i = 1; i < ship.lives; i++)
   {
     glPushMatrix();
     myTranslate2D(3+3*i,95);
@@ -839,81 +850,36 @@ sqrDistance(Coords* a, Coords* b)
     return x*x + y*y;
 }
 
-int sign(int x)
-{
-    if( x > 0)
-        return 1;
-    else if( x < 0)
-        return -1;
-    else
-        return 0;
-}
-
 /*
- Quick intersection check used to avoid heavy calculations in later steps of poly colision.
- Bounding box check for line ab, and cd.
+I looked up a lot of fomulas online for how to do this.  This one I found
+in c# here: http://gamedev.stackexchange.com/questions/26004/how-to-detect-2d-line-on-line-collision
+But the math behind it I do understand.  I am using this because my formula was
+not working right before.
+
+It works off of creating finding the intersection as part of the equaion along
+both lines.  If it is in both line segments, then both counters will be between 0 and 1.
 */
-int boxIntersect(Coords *a, Coords *b, Coords *c, Coords *d)
-{
-    double min1, max1, min2, max2;
-
-    if(a->x < b->x)
-    {
-        min1 = a->x;
-        max1 = b->x;
-    }
-    else
-    {
-        max1 = a->x;
-        min1 = b->x;
-    }
-
-    if(c->x < d->x)
-    {
-        min2 = c->x;
-        max2 = d->x;
-    }
-    else
-    {
-        max2 = c->x;
-        min2 = d->x;
-    }
-
-    if (max1 < min2 || max2 < min1) return 0;
-
-    if(a->y < b->y)
-    {
-        min1 = a->y;
-        max1 = b->y;
-    }
-    else
-    {
-        max1 = a->y;
-        min1 = b->y;
-    }
-
-    if(c->y < d->y)
-    {
-        min2 = c->y;
-        max2 = d->y;
-    }
-    else
-    {
-        max2 = c->y;
-        min2 = d->y;
-    }
-
-    return !(max1 < min2 || max2 < min1);
-
-}
-
 int lineColision(Coords *a, Coords *b, Coords *c, Coords *d)
 {
-    double slope, constant;
-    slope = (a->y - b->y) / (a->x - b->x);
-    constant = a->y - slope * a->x;
+    double n1, n2, denom;
+    // The bottom that we are going to divide by.
+    // This is the dinference of slope without regard for what the actual slopes are.
+    // This avoids actualy figuring out which points are less then the others.
+    // This value will be zero when they are colinear.
+    denom = ((b->x - a->x) * (d->y - c->y)) - ((b->y - a->y) * (d->x - c->x));
+    // This is the offset from each line,
+    // by comparing point a to point c, then point b to point c in n2.
+    n1 = ((a->y - c->y) * (d->x - c->x)) - ((a->x - c->x) * (d->y - c->y));
+    n2 = ((a->y - c->y) * (b->x - a->x)) - ((a->x - c->x) * (b->y - a->y));
 
-    return sign(slope * c->x + constant - c->y) != sign(slope * d->x + constant - d->y);
+    // If there were going to be improvments made, it would be here.
+    // Improvment would be done by calculating slope and check order of points.
+    if (denom == 0) return n1 == 0 && n2 == 0;
+
+    n1 /= denom;
+    n2 /= denom;
+
+    return (n1 >= 0 && n1 <= 1) && (n2 >= 0 && n2 <= 1);
 }
 
 /*
@@ -948,7 +914,7 @@ int polygonColision(Coords *poly1, int size1, double phi1, Coords *pos1,
             {
                 POINT_SETUP(d,phi2,poly2,j,pos2);
             }
-            if ( boxIntersect(&a,&b,&c,&d) && lineColision(&a,&b,&c,&d) )
+            if ( lineColision(&a,&b,&c,&d) )
             {
                 hitA = a;
                 hitB = b;
