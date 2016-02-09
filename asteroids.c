@@ -51,6 +51,8 @@
 #define SHIP_INVINCIBILITY_FRAMES 60
 #define SHIP_STARTING_LIVES    3
 
+#define WAVE_MAX_FRAMES 30
+
 #define SCREENSHAKE_DECAY 0.1
 
 #define DYING_FRAMES 60
@@ -137,7 +139,7 @@ static void drawUI();
 static void setScore(int s);
 
 static void spawnAsteroidSpecific(int count, int x, int y, double size);
-static void spawnAsteroid(int count);
+static void spawnAsteroidLevel(int level);
 
 static double sqrDistance(Coords* a, Coords* b);
 static int polygonColision(Coords *poly1, int size1, double phi1, Coords *pos1,
@@ -156,8 +158,8 @@ static Photon	photons[MAX_PHOTONS];
 static Asteroid	asteroids[MAX_ASTEROIDS];
 static Dust dusts[MAX_DUSTS];
 static GameState state;
-static int stateCounter, score;
-static char scoreStr[5];
+static int stateCounter, score, level, waveCounter;
+static char scoreStr[5], waveStr[8];
 
 /* -- added effect on death ------------------------------------------------- */
 static Coords hitA, hitB, hitC, hitD;
@@ -276,6 +278,7 @@ mainTime(int value)
 
     screenShake -= SCREENSHAKE_DECAY;
     if(screenShake < 0) screenShake = 0;
+    if(waveCounter > 0) waveCounter--;
 
     /* advance the ship */
     if(state == GameState_Playing)
@@ -296,7 +299,7 @@ mainTime(int value)
         activateDust(&dusts[i]);
 
     if(asteroidsActiveCount < 1)
-        spawnAsteroid(5);
+        spawnAsteroidLevel(++level);
 
     /* advance photon laser shots, eliminating those that have gone past
       the window boundaries and check for collisions with asteroids */
@@ -576,10 +579,10 @@ initPlay()
   ship.dpos.x = 0;
   ship.dpos.y = 0;
   ship.phi = 0;
-  ship.invincible = SHIP_INVINCIBILITY_FRAMES;
   ship.shotCooldown = 0;
   ship.lives = SHIP_STARTING_LIVES;
   state = GameState_Playing;
+  level = 0;
   setScore(0);
 
   for (i = 0; i < MAX_PHOTONS; i++)
@@ -762,7 +765,11 @@ void drawUI()
   setMaxShake(5);
   DisplayString(GetFPS(),3,3,93,4);
   if(state == GameState_Playing)
+  {
     DisplayString(scoreStr,2,3,2,90);
+    if(waveCounter > 0)
+      DisplayString(waveStr, 5, 5, 30, 50);
+  }
   setMaxShake(0.3);
   for(i = 1; i < ship.lives; i++)
   {
@@ -802,10 +809,15 @@ static void spawnAsteroidSpecific(int count, int x, int y, double size)
     }
 }
 
-static void spawnAsteroid(int count)
+static void spawnAsteroidLevel(int level)
 {
-    int index;
+    int index, count, minSize, maxSize;
     int snap, vary;
+
+    count = 4 + level / 5;
+    minSize = ASTEROIDS_SPAWN_MIN + level % 5;
+    maxSize = ASTEROIDS_SPAWN_MAX + level % 5;
+
     for (index = 0; index < MAX_ASTEROIDS && count > 0; index++)
     {
         if (!asteroids[index].active) {
@@ -819,15 +831,18 @@ static void spawnAsteroid(int count)
             vary = myRandom(0, 100);
             if(rand() % 2)
             {
-                initAsteroid(&asteroids[index], snap, vary, myRandom(ASTEROIDS_SPAWN_MIN, ASTEROIDS_SPAWN_MAX));
+                initAsteroid(&asteroids[index], snap, vary, myRandom(minSize, maxSize));
             }
             else
             {
-                initAsteroid(&asteroids[index], vary, snap, myRandom(ASTEROIDS_SPAWN_MIN, ASTEROIDS_SPAWN_MAX));
+                initAsteroid(&asteroids[index], vary, snap, myRandom(minSize, maxSize));
             }
             count--;
         }
     }
+    sprintf(waveStr,"Wave %2d",level);
+    waveCounter = WAVE_MAX_FRAMES;
+    ship.invincible = SHIP_INVINCIBILITY_FRAMES;
 }
 
 /* -- helper functions ------------------------------------------------------ */
