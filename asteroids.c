@@ -67,7 +67,7 @@ typedef struct Coords {
 } Coords;
 
 /*
-  State explanations:
+  State explanations for powerups:
     PlayState_Normal this is normal control of your ship.  You can shoot, and move normaly.
 */
 typedef enum {ShipState_Normal} ShipState;
@@ -134,6 +134,8 @@ static void	drawAsteroid(Asteroid *a);
 static void drawDust(Dust *d);
 static void drawUI();
 
+static void setScore(int s);
+
 static void spawnAsteroidSpecific(int count, int x, int y, double size);
 static void spawnAsteroid(int count);
 
@@ -154,7 +156,8 @@ static Photon	photons[MAX_PHOTONS];
 static Asteroid	asteroids[MAX_ASTEROIDS];
 static Dust dusts[MAX_DUSTS];
 static GameState state;
-static int stateCounter;
+static int stateCounter, score;
+static char scoreStr[5];
 
 /* -- added effect on death ------------------------------------------------- */
 static Coords hitA, hitB, hitC, hitD;
@@ -219,6 +222,8 @@ myDisplay()
       setMaxShake(5);
       DisplayString("You are dead", 5,5,12.5,60);
       setMaxShake(7);
+      DisplayString("Final score: ", 2.5, 2.5, 25, 45);
+      DisplayString(scoreStr,2.5, 2.5, 65, 45);
       DisplayString("Press space to not be dead",2.5,2.5,8,30);
       break;
     case GameState_Playing:
@@ -383,7 +388,7 @@ static void activatePhoton(Photon *p)
               p->active = 0;
               if (asteroids[j].maxCoord > 5)
                   spawnAsteroidSpecific((rand() % 2 + 2), asteroids[j].pos.x, asteroids[j].pos.y, myRandom(2,5));
-
+              setScore(score + 1);
               screenShake = 2;
           }
       }
@@ -554,6 +559,7 @@ init()
   state = GameState_StartScreen;
   glPointSize(2);
   glEnable(GL_POINT_SMOOTH);
+  setScore(0);
   /*
    * set parameters including the numbers of asteroids and photons present,
    * the maximum velocity of the ship, the velocity of the laser shots, the
@@ -574,6 +580,7 @@ initPlay()
   ship.shotCooldown = 0;
   ship.lives = SHIP_STARTING_LIVES;
   state = GameState_Playing;
+  setScore(0);
 
   for (i = 0; i < MAX_PHOTONS; i++)
   {
@@ -754,6 +761,8 @@ void drawUI()
   int i, j;
   setMaxShake(5);
   DisplayString(GetFPS(),3,3,93,4);
+  if(state == GameState_Playing)
+    DisplayString(scoreStr,2,3,2,90);
   setMaxShake(0.3);
   for(i = 1; i < ship.lives; i++)
   {
@@ -767,6 +776,13 @@ void drawUI()
     glEnd();
     glPopMatrix();
   }
+}
+
+void setScore(int s)
+{
+  score = s;
+  if(score > 9999) score = 9999; // You know, if anyone actualy gets here.
+  sprintf(scoreStr, "%4d", score);
 }
 
 /* -- spawning function ----------------------------------------------------- */
