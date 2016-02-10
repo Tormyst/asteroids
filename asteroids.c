@@ -38,7 +38,7 @@
 #define MAX_ASTEROIDS	 15
 #define MAX_DUSTS      60
 
-#define DUST_FRAME_DESPAWN 90
+#define DUST_FRAME_DESPAWN 60
 
 #define ASTEROIDS_MAX_VERTICES	16
 #define ASTEROIDS_SPAWN_MIN 2
@@ -106,7 +106,7 @@ typedef struct {
       or be declared dead.
     GameState_Dead is the game over screen state.  High score and such should be delt with here.
 */
-typedef enum {GameState_StartScreen, GameState_Playing, GameState_Dying, GameState_Dead} GameState;
+typedef enum {GameState_StartScreen, GameState_Playing, GameState_Paused, GameState_Dying, GameState_Dead} GameState;
 
 /* -- ship points ----------------------------------------------------------- */
 
@@ -160,10 +160,6 @@ static Dust dusts[MAX_DUSTS];
 static GameState state;
 static int stateCounter, score, level, waveCounter;
 static char scoreStr[5], waveStr[8];
-
-/* -- added effect on death ------------------------------------------------- */
-static Coords hitA, hitB, hitC, hitD;
-static int showHitLines;
 
 
 /* -- main ------------------------------------------------------------------ */
@@ -228,6 +224,8 @@ myDisplay()
       DisplayString(scoreStr,2.5, 2.5, 65, 45);
       DisplayString("Press space to not be dead",2.5,2.5,8,30);
       break;
+    case GameState_Paused:
+      DisplayString("Paused",8,8,25,60);
     case GameState_Playing:
       setMaxShake(0.3);
       drawShip(&ship);
@@ -248,17 +246,6 @@ myDisplay()
     if(dusts[i].active)
       drawDust(&dusts[i]);
 
-  if(showHitLines)
-  {
-      glBegin(GL_LINES);
-      glColor3f(1.0,0.0,0.0);
-      glVertex2d(hitA.x, hitA.y);
-      glVertex2d(hitB.x, hitB.y);
-      glVertex2d(hitC.x, hitC.y);
-      glVertex2d(hitD.x, hitD.y);
-      glEnd();
-  }
-
 	COLOR_GL_LINE;
   drawUI();
   glPopMatrix();
@@ -273,7 +260,12 @@ mainTime(int value)
     /*
      *	timer callback function
      */
-
+     if(state == GameState_Paused)
+     {
+       glutTimerFunc(recallTime, mainTime, value);
+       glutPostRedisplay();
+       return;
+     }
     /* reset some state values */
 
     screenShake -= SCREENSHAKE_DECAY;
@@ -307,8 +299,6 @@ mainTime(int value)
       if (photons[i].active)
         activatePhoton(&photons[i]);
 
-    glutPostRedisplay();
-
     if(state == GameState_Dying)
     {
       if(stateCounter <= 0)
@@ -335,6 +325,8 @@ mainTime(int value)
       stateCounter--;
 
     }
+
+    glutPostRedisplay();
     glutTimerFunc(recallTime, mainTime, value);		/* 30 frames per second */
 }
 
@@ -428,7 +420,6 @@ static void activateAsteroid(Asteroid *a)
       && sqrDistance(&a->pos, &ship.pos) < squareMax * 1.5
       && polygonColision(&a->coords, a->nVertices, a->phi, &a->pos, &shipPoints, 4, ship.phi, &ship.pos))
   {
-      showHitLines = 1;
       screenShake += 5;
       state = GameState_Dying;
       stateCounter = DYING_FRAMES;
@@ -486,6 +477,11 @@ myKey(unsigned char key, int x, int y)
         //     }
         //     break;
         // }
+        case 'p':
+          if(state == GameState_Playing)
+            state = GameState_Paused;
+          else if(state == GameState_Paused)
+            state = GameState_Playing;
         default:
             break;
     }
@@ -651,8 +647,8 @@ void initDustFromAsteroid(Asteroid *a)
         POINT_SETUP(dusts[dustCounter].pos1,a->phi, a->coords,polyCounter - 1, (&a->pos));
         POINT_SETUP(dusts[dustCounter].pos2,a->phi, a->coords,0, (&a->pos));
       }
-      dusts[dustCounter].dpos.x = a->dpos.x + myRandom(-0.1, 0.1);
-      dusts[dustCounter].dpos.y = a->dpos.y + myRandom(-0.1, 0.1);
+      dusts[dustCounter].dpos.x = a->dpos.x + myRandom(-0.5, 0.5);
+      dusts[dustCounter].dpos.y = a->dpos.y + myRandom(-0.5, 0.5);
       polyCounter++;
     }
     if(polyCounter > a->nVertices)
@@ -752,7 +748,7 @@ drawAsteroid(Asteroid *a)
 
 void drawDust(Dust *d)
 {
-  double colorToDisplay = 0.9 - d->frame * 0.01;
+  double colorToDisplay = 0.9 - d->frame * 0.02;
   glColor3f( colorToDisplay, colorToDisplay, colorToDisplay );
   glBegin(GL_LINES);
   drawLineWithShake(d->pos1.x, d->pos1.y, d->pos2.x, d->pos2.y);
@@ -947,10 +943,6 @@ int polygonColision(Coords *poly1, int size1, double phi1, Coords *pos1,
             }
             if ( lineColision(&a,&b,&c,&d) )
             {
-                hitA = a;
-                hitB = b;
-                hitC = c;
-                hitD = d;
                 return 1;
             }
         }
