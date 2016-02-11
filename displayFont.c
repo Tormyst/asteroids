@@ -1,3 +1,9 @@
+/*
+ * displayFont.c
+ *
+ * A font and string formater in open gl.
+ * Author: Raphael BN
+*/
 #ifdef __APPLE__
     #include <GLUT/glut.h> // Required on mac.  Was working with GL/glut.h in 10.10.5, but not in 10.11.2
 #else
@@ -251,12 +257,12 @@ void Num9()
     drawLineWithShake(-100.0, 100.0, -100.0, 0.0);
     drawLineWithShake(-100.0, 0.0, 100.0, 0.0);
 }
-
+// Is a string formater.  This is actualy really hard to use.  I will have to fix it.
+// width is actualy 2 times this, so is hight.  x and y, are the first characters center point.
+// Suports letters and numbers.
 void DisplayString(char* str, double widthPerCharacter, double hightPerCharacter, double xTransform, double yTransform)
 {
 	int placement = 0;
-	//fprintf(stderr, "Hello! str points to %p\n", str);
-   	//fprintf(stderr, "Making %s\n", *str);
 	while (*str != '\0')
     {
 		glPushMatrix();

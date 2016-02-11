@@ -1,3 +1,10 @@
+/*
+ * shake.c
+ *
+ * This is a very low down basic file that adds the shake effect to all the lines in the game.
+ * It also has the ability to show random colors.
+ * Author: Raphael BN
+ */
 #ifdef __APPLE__
     #include <GLUT/glut.h> // Required on mac.  Was working with GL/glut.h in 10.10.5, but not in 10.11.2
 #else

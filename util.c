@@ -1,3 +1,10 @@
+/*
+ *	util.c
+ *
+ *	I moved the myRandom function from the skeleton code here, so it could be used in other files.
+ *  Created by Raphael Bronfman-Nadas from skeleton code provided by Dirk Arnold
+ * Author: Raphael BN
+ */
 #include "util.h"
 #include <stdlib.h>
 

@@ -2,15 +2,15 @@
  * glutTime.c
  *
  * A simple class made to do some glut based time calculations for frame independent events.
- *
+ * eventualy.  Currently it is being used as an FPS counter only.
  * Author: Raphael BN
  */
 
-// #ifdef __APPLE__
-//     #include <GLUT/glut.h> // Required on mac.  Was working with GL/glut.h in 10.10.5, but not in 10.11.2
-// #else
-//     #include <GL/glut.h> // Required elsewhere.
-// #endif
+#ifdef __APPLE__
+    #include <GLUT/glut.h> // Required on mac.  Was working with GL/glut.h in 10.10.5, but not in 10.11.2
+#else
+    #include <GL/glut.h> // Required elsewhere.
+#endif
 
 #include "glutTime.h"
 #include <stdio.h>

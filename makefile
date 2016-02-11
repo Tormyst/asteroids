@@ -8,10 +8,11 @@ CFLAGS = -g -Wall
 default: run
 all: default
 
-OBJECTS = $(patsubst %.c, %.o, $(wildcard *.c))
+OBJECTS = $(patsubst %.c, .objectFiles/%.o, $(wildcard *.c))
 HEADERS = $(wildcard *.h)
 
-%.o: %.c $(HEADERS)
+.objectFiles/%.o: %.c $(HEADERS)
+	mkdir -p .objectFiles
 	$(CC) $(CFLAGS) -c -w $< -o $@
 
 .PRECIOUS: $(TARGET) $(OBJECTS)
@@ -24,4 +25,5 @@ run: $(TARGET)
 
 clean:
 	-rm -f *.o
+	-rm -f .objectFiles
 	-rm -f $(TARGET)
