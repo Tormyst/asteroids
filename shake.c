@@ -7,9 +7,16 @@
 #include "util.h"
 
 double MaxShake = 5;
-
 double shakeX;
 double shakeY;
+
+int rc = 0;
+
+void useRandomColor(int use)
+{
+  rc = use;
+}
+
 void setShake()
 {
     if( MaxShake !=0 )
@@ -21,6 +28,8 @@ void setShake()
     {
         shakeX = shakeY = 0;
     }
+    if(rc)
+      glColor3f(myRandom(0.1,1),myRandom(0.1,1),myRandom(0.1,1));
 }
 
 void setMaxShake(double newValue)

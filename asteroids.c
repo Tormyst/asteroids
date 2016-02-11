@@ -1,7 +1,8 @@
 /*
  *	asteroids.c
  *
- *	skeleton code for an OpenGL implementation of the Asteroids video game
+ *	Main file for asteroid game.
+ *  Created by Raphael Bronfman-Nadas from skeleton code provided by Dirk Arnold
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,67 +31,48 @@
 #define myTranslate2D(x,y) glTranslated(x, y, 0.0)
 #define myScale2D(x,y) glScalef(x, y, 1.0)
 #define myRotate2D(angle) glRotatef(RAD2DEG*angle, 0.0, 0.0, 1.0)
-
+// Base colors for lines.  Points should be brighter, so we lower liens insted.
 #define COLOR_GL_LINE glColor3f( 0.9, 0.9, 0.9 )
 #define COLOR_GL_DOT glColor3f( 1.0, 1.0, 1.0 )
-
+// Max elements in pools.
 #define MAX_PHOTONS     8
 #define MAX_ASTEROIDS	 15
 #define MAX_DUSTS      60
-
+// Time before dust despawns and returnes to the pool
 #define DUST_FRAME_DESPAWN 60
-
+// Constants for asteroids
 #define ASTEROIDS_MAX_VERTICES	16
 #define ASTEROIDS_SPAWN_MIN 2
 #define ASTEROIDS_SPAWN_MAX 10
-
+// Constants for ships
 #define SHIP_MAX_ROTATION 0.3
 #define SHIP_ACCELERATION 0.2
 #define SHIP_MAX_SPEED    3
 #define SHIP_SHOT_COOLDOWN_MAX 5
 #define SHIP_INVINCIBILITY_FRAMES 60
 #define SHIP_STARTING_LIVES    3
-
+// Time text for wave is on screen.
 #define WAVE_MAX_FRAMES 30
-
+// Amount screenshake goes away per frame.
 #define SCREENSHAKE_DECAY 0.1
-
+// Constants having to do with ship death.
 #define DYING_FRAMES 60
 #define DYING_DUST_FRAMES 10
-
+// Preforms rotation and translation on a point.
 #define POINT_SETUP(out,phi,poly,index,pos) out.x = poly[index].x * cos(phi) + poly[index].y *-sin(phi) + pos->x; \
                                             out.y = poly[index].x * sin(phi) + poly[index].y * cos(phi) + pos->y;
-
-
 /* -- type definitions ------------------------------------------------------ */
-
-typedef struct Coords {
-	double		x, y;
-} Coords;
-
-/*
-  State explanations for powerups:
-    PlayState_Normal this is normal control of your ship.  You can shoot, and move normaly.
-*/
-typedef enum {ShipState_Normal} ShipState;
+typedef struct Coords { double		x, y;} Coords;
 
 typedef struct {
-  Coords pos, dpos;
-	double	phi;
+  Coords pos, dpos;double	phi;
   int showFire, shotCooldown, lives, invincible;
-  ShipState state;
 } Ship;
 
-typedef struct {
-  Coords pos, dpos;
-	int	active;
-} Photon;
+typedef struct {Coords pos, dpos; int	active;} Photon;
 
-typedef struct {
-  Coords pos, dpos;
-	int	active, nVertices;
-	double	phi, dphi, maxCoord;
-	Coords	coords[ASTEROIDS_MAX_VERTICES];
+typedef struct {Coords pos, dpos; int	active, nVertices;
+  double	phi, dphi, maxCoord; Coords	coords[ASTEROIDS_MAX_VERTICES];
 } Asteroid;
 
 typedef struct {
@@ -100,20 +82,16 @@ typedef struct {
 
 /*
   State explanations:
-    GameState_StartScreen is the main screen you start the game on.  Has asteroids in the backgroud, has title.
-    GameState_Playing is the main state of the game.  As long as this state is in play, the player has control.
-    GameState_Dying is the animation of the player dying.  The player loses control and must wait to respawn,
-      or be declared dead.
-    GameState_Dead is the game over screen state.  High score and such should be delt with here.
+    GameState_StartScreen Title screen.
+    GameState_Playing As long as in this state, the player has control.
+    GameState_Dying animation of the player dying.
+    GameState_Dead game over screen.
 */
 typedef enum {GameState_StartScreen, GameState_Playing, GameState_Paused, GameState_Dying, GameState_Dead} GameState;
 
 /* -- ship points ----------------------------------------------------------- */
-
-static const Coords shipPoints[] = { { 0, 2}, {1.2, -1.6}, {0, -1}, {-1.2, -1.6} };
-
+static const Coords shipPoints[] = {{ 0, 2},{1.2, -1.6},{0, -1},{-1.2, -1.6}};
 /* -- function prototypes --------------------------------------------------- */
-
 static void	myDisplay(void);
 static void	mainTime(int value);
 static void activateShip(Ship *s);
@@ -121,10 +99,10 @@ static void activatePhoton(Photon *p);
 static void activateAsteroid(Asteroid *a);
 static void activateDust(Dust *d);
 static void	myKey(unsigned char key, int x, int y);
+static void myKeyUp(unsigned char key, int x, int y);
 static void	keyPress(int key, int x, int y);
 static void	keyRelease(int key, int x, int y);
 static void	myReshape(int w, int h);
-
 static void	init(void);
 static void initPlay(void);
 static void	initAsteroid(Asteroid *a, double x, double y, double size);
@@ -135,23 +113,16 @@ static void	drawPhoton(Photon *p);
 static void	drawAsteroid(Asteroid *a);
 static void drawDust(Dust *d);
 static void drawUI();
-
 static void setScore(int s);
-
 static void spawnAsteroidSpecific(int count, int x, int y, double size);
 static void spawnAsteroidLevel(int level);
-
 static double sqrDistance(Coords* a, Coords* b);
 static int polygonColision(Coords *poly1, int size1, double phi1, Coords *pos1,
                            Coords *poly2, int size2, double phi2, Coords *pos2);
 static int screenWrap(Coords* position, int border);
-
-
 /* -- global variables ------------------------------------------------------ */
-
 double screenShake = 0;
-
-static int	up=0, down=0, left=0, right=0, firing=0;	/* state of cursor keys */
+static int	up=0, down=0, left=0, right=0, firing=0, hyper = 0;	/* state of cursor keys */
 static double	xMax, yMax;
 static Ship	ship;
 static Photon	photons[MAX_PHOTONS];
@@ -176,6 +147,7 @@ main(int argc, char *argv[])
   glutDisplayFunc(myDisplay);
   glutIgnoreKeyRepeat(1);
   glutKeyboardFunc(myKey);
+  glutKeyboardUpFunc(myKeyUp);
   glutSpecialFunc(keyPress);
   glutSpecialUpFunc(keyRelease);
   glutReshapeFunc(myReshape);
@@ -303,6 +275,7 @@ mainTime(int value)
     {
       if(stateCounter <= 0)
       {
+        ship.lives--;
         if(ship.lives > 0)
         {
           state = GameState_Playing;
@@ -311,7 +284,6 @@ mainTime(int value)
           ship.dpos.x = 0;
           ship.dpos.y = 0;
           ship.phi = 0;
-          ship.lives--;
           ship.invincible = SHIP_INVINCIBILITY_FRAMES;
         }
         else
@@ -348,8 +320,17 @@ static void activateShip(Ship *s)
       s->dpos.y = (s->dpos.y / speed) * SHIP_MAX_SPEED;
   }
 
-  s->pos.x += s->dpos.x;
-  s->pos.y += s->dpos.y;
+  if(hyper)
+  {
+    s->pos.x = myRandom(0,xMax);
+    s->pos.y = myRandom(0,yMax);
+  }
+  else
+  {
+    s->pos.x += s->dpos.x;
+    s->pos.y += s->dpos.y;
+  }
+
 
   screenWrap(&s->pos, 2);
 
@@ -467,6 +448,10 @@ myKey(unsigned char key, int x, int y)
              break;
           }
           break;
+        case 'x':
+          hyper = 1;
+          useRandomColor(1);
+          break;
         // case 'a':
         // {
         //     int i;
@@ -485,6 +470,18 @@ myKey(unsigned char key, int x, int y)
         default:
             break;
     }
+}
+
+void
+myKeyUp(unsigned char key, int x, int y)
+{
+  switch (key) {
+      case 'x':
+        hyper = 0;
+        useRandomColor(0);
+        break;
+      }
+
 }
 
 void
@@ -557,6 +554,7 @@ init()
 {
   state = GameState_StartScreen;
   glPointSize(2);
+  glLineWidth(2);
   glEnable(GL_POINT_SMOOTH);
   setScore(0);
   /*
@@ -697,9 +695,7 @@ drawShip(Ship *s)
     myTranslate2D(s->pos.x,s->pos.y);
     myRotate2D(s->phi);
     if(s->invincible/10 % 2)
-      glLineWidth(3);
-    else
-      glLineWidth(1);
+      glLineWidth(4);
     glBegin(GL_LINES);
     for (i = 1; i < 4; i++) {
         drawLineWithShake(shipPoints[i-1].x, shipPoints[i-1].y,shipPoints[i].x, shipPoints[i].y);
@@ -715,7 +711,7 @@ drawShip(Ship *s)
         }
     }
     glEnd();
-    glLineWidth(1);
+    glLineWidth(2);
     glPopMatrix();
 }
 
@@ -823,15 +819,17 @@ static void spawnAsteroidLevel(int level)
              Ether x or y is going to be zero or 100 (snap), the other is random between those points (vary).
              We just flip a coin to pick which is which.
              */
-            snap = (rand() % 2) * 100;
-            vary = myRandom(0, 100);
             if(rand() % 2)
             {
-                initAsteroid(&asteroids[index], snap, vary, myRandom(minSize, maxSize));
+              snap = (rand() % 2) * xMax;
+              vary = myRandom(0, yMax);
+              initAsteroid(&asteroids[index], snap, vary, myRandom(minSize, maxSize));
             }
             else
             {
-                initAsteroid(&asteroids[index], vary, snap, myRandom(minSize, maxSize));
+              snap = (rand() % 2) * yMax;
+              vary = myRandom(0, xMax);
+              initAsteroid(&asteroids[index], vary, snap, myRandom(minSize, maxSize));
             }
             count--;
         }
@@ -851,16 +849,16 @@ screenWrap(Coords* position, int border)
 {
     int retVal = 2;
     if(position->x < -border)
-        position->x = 100 + border;
-    else if(position->x > 100 + border)
+        position->x = xMax + border;
+    else if(position->x > xMax + border)
         position->x = -border;
     else
         retVal--;
 
 
     if(position->y < -border)
-        position->y = 100 + border;
-    else if(position->y > 100 + border)
+        position->y = yMax + border;
+    else if(position->y > yMax + border)
         position->y = -border;
     else
         retVal--;
