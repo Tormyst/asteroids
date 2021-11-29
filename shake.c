@@ -24,6 +24,11 @@ void useRandomColor(int use)
   rc = use;
 }
 
+int getRandomColor()
+{
+  return rc;
+}
+
 void setShake()
 {
     if( MaxShake !=0 )

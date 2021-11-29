@@ -32,13 +32,20 @@
 #define myTranslate2D(x,y) glTranslated(x, y, 0.0)
 #define myScale2D(x,y) glScalef(x, y, 1.0)
 #define myRotate2D(angle) glRotatef(RAD2DEG*angle, 0.0, 0.0, 1.0)
+
+// Target FPS locked to 30 as physics is locked to FPS right now.  
+// TODO: Make gameplay linked not to frames.  
+// TODO: Gameplay must be slowable independent of framerate, as slowdown should impact gamespeed
+#define TARGET_FPS 30
+#define SLOW_FPS 15
+
 // Base colors for lines.  Points should be brighter, so we lower liens insted.
 #define COLOR_GL_LINE glColor3f( 0.9, 0.9, 0.9 )
 #define COLOR_GL_DOT glColor3f( 1.0, 1.0, 1.0 )
 // Max elements in pools.
 #define MAX_PHOTONS     8
 #define MAX_ASTEROIDS	 15
-#define MAX_DUSTS      60
+#define MAX_DUSTS      150
 // Time before dust despawns and returnes to the pool
 #define DUST_FRAME_DESPAWN 60
 // Constants for asteroids
@@ -54,11 +61,15 @@
 #define SHIP_STARTING_LIVES    3
 // Time text for wave is on screen.
 #define WAVE_MAX_FRAMES 30
+// Making hyper more usable
+#define HYPER_CAST 10
+#define HYPER_COOLDOWN 20
+#define HYPER_DUST_INIT 1
 // Amount screenshake goes away per frame.
 #define SCREENSHAKE_DECAY 0.1
 // Constants having to do with ship death.
 #define DYING_FRAMES 60
-#define DYING_DUST_FRAMES 10
+#define DYING_DUST_FRAMES 20
 // Preforms rotation and translation on a point.
 #define POINT_SETUP(out,phi,poly,index,pos) out.x = poly[index].x * cos(phi) + poly[index].y *-sin(phi) + pos->x; \
                                             out.y = poly[index].x * sin(phi) + poly[index].y * cos(phi) + pos->y;
@@ -66,8 +77,8 @@
 typedef struct Coords { double		x, y;} Coords;
 
 typedef struct {
-  Coords pos, dpos;double	phi;
-  int showFire, shotCooldown, lives, invincible;
+  Coords pos, dpos, hyperPos;double	phi;
+  int showFire, shotCooldown, lives, invincible, hyper;
 } Ship;
 
 typedef struct {Coords pos, dpos; int	active;} Photon;
@@ -109,6 +120,7 @@ static void initPlay(void);
 static void	initAsteroid(Asteroid *a, double x, double y, double size);
 static void initDustFromAsteroid(Asteroid *a);
 static void initDustFromShip(Ship *s);
+static void initDustFromShipHyperTarget(Ship *s);
 static void	drawShip(Ship *s);
 static void	drawPhoton(Photon *p);
 static void	drawAsteroid(Asteroid *a);
@@ -122,7 +134,9 @@ static int polygonColision(Coords *poly1, int size1, double phi1, Coords *pos1,
                            Coords *poly2, int size2, double phi2, Coords *pos2);
 static int screenWrap(Coords* position, int border);
 /* -- global variables ------------------------------------------------------ */
-double screenShake = 0;
+static int recallTime_target = 1000 / TARGET_FPS; 
+static int recallTime_slow = 1000 / SLOW_FPS; 
+static double screenShake = 0;
 static int	up=0, down=0, left=0, right=0, firing=0, hyper = 0;	/* state of cursor keys */
 static double	xMax, yMax;
 static Ship	ship;
@@ -165,7 +179,7 @@ main(int argc, char *argv[])
 void
 myDisplay() // Display callback.
 {
-  int	i;
+  int	i, dShip = 0;
   OnFrame(); // On Frame is for the fps counter to count a frame has gone by.
 
   glClear(GL_COLOR_BUFFER_BIT);
@@ -198,9 +212,7 @@ myDisplay() // Display callback.
       DisplayString("Paused",8,8,25,60);
       // This is right here.
     case GameState_Playing:
-      setMaxShake(0.3);
-      // Draw ship.
-      drawShip(&ship);
+      dShip = 1;
       break;
   }
   // Photons
@@ -219,6 +231,12 @@ myDisplay() // Display callback.
     if(dusts[i].active)
       drawDust(&dusts[i]);
 
+  // Make ship is drawn after dust.
+  if (dShip) {
+    setMaxShake(hyper ? 0.5 : 0.3);
+    drawShip(&ship);
+  }
+
   // Draws FPS counter, score, and lives.
   drawUI();
   glPopMatrix();
@@ -229,8 +247,7 @@ myDisplay() // Display callback.
 void
 mainTime(int value)
 {
-    int i, j, asteroidsActiveCount = 0, recallTime = 33;
-    // recallTime is used to slow down the game when it needs it.
+    int i, j, asteroidsActiveCount = 0, recallTime = recallTime_target;
     /*
      *	timer callback function
      */
@@ -246,8 +263,16 @@ mainTime(int value)
     if(screenShake < 0) screenShake = 0;
     if(waveCounter > 0) waveCounter--;
     /* advance the ship */
-    if(state == GameState_Playing)
+    if(state == GameState_Playing) {
       activateShip(&ship);
+      if (hyper) {
+	initDustFromShipHyperTarget(&ship);
+	if (ship.hyper == 1) {
+          for(i=0;i<HYPER_DUST_INIT;i++)
+            initDustFromShip(&ship);
+	}
+      }
+    }
     /* advance asteroids and collide with ship */
     for (i = 0; i < MAX_ASTEROIDS; i++)
       if(asteroids[i].active)
@@ -296,7 +321,7 @@ mainTime(int value)
       if(stateCounter > DYING_FRAMES - DYING_DUST_FRAMES)
       {
         initDustFromShip(&ship);
-        recallTime = 66;
+        recallTime = recallTime_slow;
       }
       stateCounter--;
     }
@@ -321,10 +346,13 @@ void activateShip(Ship *s)
       s->dpos.y = (s->dpos.y / speed) * SHIP_MAX_SPEED;
   }
   // Set position
-  if(hyper)
+  if(hyper && s->hyper == 0 )
   {
-    s->pos.x = myRandom(0,xMax);
-    s->pos.y = myRandom(0,yMax);
+    s->pos.x = s->hyperPos.x;
+    s->pos.y = s->hyperPos.y;
+    s->hyper = HYPER_CAST + HYPER_COOLDOWN;
+    s->hyperPos.x = myRandom(0,xMax);
+    s->hyperPos.y = myRandom(0,yMax);
   }
   else
   {
@@ -339,6 +367,12 @@ void activateShip(Ship *s)
     s->shotCooldown--;
   if(s->invincible > 0)
     s->invincible--;
+  if(s->hyper > HYPER_CAST || (s->hyper > 0 && hyper))
+    s->hyper--;
+
+  // Make sure we sit at HYPER_CAST if hyper isn't pressed
+  if(!hyper && s->hyper < HYPER_CAST)
+    s->hyper = HYPER_CAST;	
 }
 static void activatePhoton(Photon *p)
 { // Photons are activated 1 frame late, for effect, and for game feel.
@@ -455,6 +489,8 @@ void myKey(unsigned char key, int x, int y)
           break;
         case 'x':
           hyper = 1;
+	  ship.hyperPos.x = myRandom(0,xMax);
+	  ship.hyperPos.y = myRandom(0,yMax);
           useRandomColor(1);
           break;
         // case 'a':
@@ -674,6 +710,30 @@ void initDustFromShip(Ship *s)
   }
   fprintf(stderr, "Ran out of dust");
 }
+
+void initDustFromShipHyperTarget(Ship *s)
+{
+  int dustCounter;
+  float phi = myRandom(0, M_PI);
+  static const Coords line[] = {{-5,-5}, {5,5}};
+
+  for(dustCounter = 0; dustCounter < MAX_DUSTS; dustCounter++)
+  {
+    if(!dusts[dustCounter].active)
+    {
+      dusts[dustCounter].active = 1;
+      dusts[dustCounter].frame = 30;
+      POINT_SETUP(dusts[dustCounter].pos1, phi, line, 0, (&s->hyperPos));
+      POINT_SETUP(dusts[dustCounter].pos2, phi, line, 1, (&s->hyperPos));
+
+      dusts[dustCounter].dpos.x = myRandom(-0.1, 0.1);
+      dusts[dustCounter].dpos.y = myRandom(-0.1, 0.1);
+      return;
+    }
+  }
+  fprintf(stderr, "Ran out of dust");
+}
+
 // Draws the ship.  Wow simple.
 void drawShip(Ship *s)
 {
@@ -733,10 +793,14 @@ void drawAsteroid(Asteroid *a)
 void drawDust(Dust *d)
 {
   double colorToDisplay = 0.9 - d->frame * 0.02;
+  // Disable random color if it was on for dust drawing
+  int rc = getRandomColor();
+  useRandomColor(0);
   glColor3f( colorToDisplay, colorToDisplay, colorToDisplay );
   glBegin(GL_LINES);
   drawLineWithShake(d->pos1.x, d->pos1.y, d->pos2.x, d->pos2.y);
   glEnd();
+  useRandomColor(rc);
 }
 // Draws FPS counter, Score, and lives.
 void drawUI()
