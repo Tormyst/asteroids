@@ -1,7 +1,18 @@
 TARGET = asteroids
-LIBS = -framework OpenGL -framework GLUT
+LINUX_LIBS = -lGL -lGLU -lglut -lm
+APPLE_LIBS = -framework OpenGL -framework GLUT
 CC = gcc
 CFLAGS = -g -Wall
+
+UNAME := $(shell uname)
+
+ifeq ($(UNAME), Linux)
+	LIBS += $(LINUX_LIBS)
+endif
+ifeq ($(UNAME), Darwin)
+	LIBS += $(APPLE_LIBS)
+endif
+
 
 .PHONY: default run clean
 
